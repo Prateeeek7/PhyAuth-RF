@@ -1,0 +1,97 @@
+LOW-COST RF FINGERPRINTING FOR PHYSICAL-LAYER DEVICE AUTHENTICATION USING DEEP LEARNING
+
+1. Abstract
+The increasing number of wireless and Internet of Things devices has created a significant need for reliable methods of identifying and authenticating physical transmitters. Conventional authentication mechanisms generally operate at the software, network, or cryptographic layer and therefore depend on stored credentials, device identifiers, or security keys. Such identifiers can potentially be copied, spoofed, or compromised. This project proposes the development of a low-cost Radio Frequency Fingerprinting system for physical-layer device authentication using an ultra-low-cost ESP32 microcontroller combined with an SRX882 receiver, multiple low-cost wireless transmitters, pulse-timing analysis, and deep learning.
+The fundamental principle behind the project is that no two physical RF transmitters generate perfectly identical signals, even when they transmit the same data using the same communication protocol and modulation scheme. Small manufacturing variations in oscillators, transistors, and capacitors introduce subtle but repeatable imperfections into the transmitted waveform's timing. These hardware-induced characteristics appear as clock skew, duty-cycle distortion, and transient pulse jitter. Together, these characteristics form an RF fingerprint that can potentially be used to distinguish one physical transmitter from another.
+The proposed system captures real-world wireless transmissions using an SRX882 receiver module connected to an ESP32. The ESP32 measures the exact duration of each High and Low electrical pulse in microseconds. The captured timing intervals are analysed to determine device-specific clock behaviour and transient characteristics.
+A deep-learning model (1D ResNet) is then trained to identify the transmitting device from its pulse-timing fingerprint. The trained model will perform both closed-set device classification and open-set physical-layer authentication. In closed-set classification, the model identifies which registered transmitter generated a received signal. In authentication mode, the system uses Mahalanobis distance to determine whether the transmitter belongs to the set of authorised devices or should be rejected as a spoofed/unknown transmitter.
+The complete project will be implemented as an end-to-end RF research and authentication platform. A Python-based backend will manage datasets, models, devices, and authentication results, and a modern web frontend will provide real-time RF visualisation, device management, and authentication monitoring. Furthermore, the trained model will be quantized into a TinyML format and flashed directly back onto the ESP32 receiver node, allowing for local on-chip authentication in under 2 milliseconds.
+
+2. Introduction
+Modern wireless communication systems depend increasingly on connected physical devices. Smartphones, wireless sensors, embedded controllers, Internet of Things nodes, industrial devices, medical systems, and communication modules continuously exchange information over wireless channels. As the number of connected devices increases, determining whether a received transmission actually originates from an authorised physical device becomes increasingly important.
+Traditional device authentication generally occurs above the physical communication layer. A device may be identified using a MAC address, digital certificate, cryptographic key, login credential, or software-generated identifier. Although these techniques are essential, they authenticate information associated with a device rather than directly examining the physical transmitter that generated the radio signal. If an attacker successfully copies an identifier or compromises a credential, the communication system may have difficulty distinguishing the genuine device from an impersonating device.
+RF fingerprinting provides an alternative and complementary method of device identification. Instead of asking only what information a transmitter claims about its identity, an RF fingerprinting system examines the physical characteristics of the transmitted waveform itself. Real electronic components are affected by manufacturing tolerances. Two nominally identical wireless transmitters therefore contain small differences in their oscillators, amplifiers, mixers, filters, and RF front ends. These differences introduce imperfections into the generated waveform.
+A conventional communication receiver attempts to compensate for many of these imperfections because they can reduce communication quality. An RF fingerprinting system takes the opposite approach. It treats these imperfections as potentially useful information. A transmitter's clock skew, duty cycle variations, pulse jitter, and transient response may collectively provide a measurable representation of the physical hardware that generated the signal.
+The project proposed in this report develops an ultra-low-cost experimental platform to investigate this concept. Instead of using expensive laboratory-grade software-defined radios (SDRs) which cost thousands of rupees, the system will use an ESP32 microcontroller and an SRX882 receiver module costing under ₹500 combined. Multiple low-cost physical transmitters (such as EV1527 key fobs) will repeatedly transmit controlled wireless signals. The ESP32 will capture the transmissions as microsecond-precision pulse intervals, after which the signals will pass through a complete machine-learning pipeline.
+The objective is not merely to build a classifier that produces a high accuracy value. The project will investigate why device classification is possible, which signal timing characteristics contain device identity, and how reliably the learned fingerprint survives changes in environmental conditions and wireless channel multipath.
+
+3. Problem Statement
+Wireless devices are generally authenticated using identifiers and credentials that exist at higher layers of the communication stack. These methods do not directly verify the physical RF transmitter responsible for generating a received signal. Furthermore, many existing RF fingerprinting studies rely on expensive software-defined radio platforms (like USRPs or even RTL-SDRs) and controlled laboratory conditions, which limits accessibility, raises power consumption, and restricts practical IoT deployment.
+The central problem addressed by this project is therefore:
+Can individual physical wireless transmitters be identified and authenticated using hardware-induced timing imperfections captured by an ultra-low-cost ESP32 + SRX882 receiver, and can this authentication be executed locally on-chip (TinyML) to block spoofing attacks in real-time?
+The project will investigate whether a low-cost receiver can capture sufficiently stable device-specific timing information for machine-learning-based authentication. It will also determine whether the classifier is learning genuine transmitter characteristics or merely memorising accidental properties of the dataset, recording session, or wireless channel.
+
+4. Research Questions
+The primary research question of the project is whether hardware-induced RF timing impairments (pulse intervals) can be used to authenticate individual wireless transmitters robustly.
+This primary question is divided into several experimental questions. The first is whether nominally similar transmitters (e.g., identical 433 MHz EV1527 key fobs) produce measurably different microsecond timing characteristics.
+The second question concerns robustness. A model that identifies devices only when the transmitter remains at the same distance and position may simply be learning the wireless channel rather than the transmitter. Therefore, the project will examine whether authentication accuracy remains stable when distance, orientation, recording session, and channel conditions change.
+The third question concerns explainability. The project will investigate which physical impairments (e.g., clock skew vs. duty-cycle distortion) contribute most strongly to the authentication decision.
+The final question concerns unknown devices and edge deployment. A practical authentication system must not force every received signal into one of the registered device classes, and it should not strictly rely on cloud connectivity. The project will investigate whether an unregistered transmitter can be correctly rejected as unknown using Mahalanobis distance, and if this decision can be made locally on the ESP32 microcontroller using a quantized TinyML model.
+
+5. Project Objectives
+The primary objective is to design and implement a complete ultra-low-cost RF fingerprinting platform capable of capturing, analysing, classifying, and authenticating physical wireless transmitters.
+The system will capture real-world RF transmissions using an SRX882 receiver and an ESP32 to create a structured JSON dataset of pulse timing intervals from multiple physical devices. A pipeline will be developed for signal detection, digital squelching, and sequence normalisation.
+A deep-learning classifier (1D Convolutional Neural Network / ResNet) will be trained to identify registered transmitters based on their timing sequences. To simulate real-world thermal drift, artificial jitter augmentation will be applied during training.
+Beyond conventional classification, the system will implement an authentication layer capable of distinguishing authorised transmitters from unknown or unregistered devices via Triplet Margin Loss and centroid distance validation.
+Finally, a complete software platform will be developed around the research pipeline. The frontend will provide RF visualisation and authentication monitoring, while the backend will manage ESP32 serial acquisition, datasets, models, devices, and authentication records. The ultimate deliverable is flashing the trained AI model back onto the ESP32 for standalone operation.
+
+6. Proposed System Architecture
+The system consists of several major layers: the physical RF layer, the acquisition layer, the artificial intelligence layer, and the full-stack software dashboard layer.
+At the physical layer, multiple independent transmitter devices (e.g., ASK/OOK key fobs or ESP32 burst nodes) will generate wireless transmissions. The transmitters use the same hardware frequency (433.92 MHz) and modulation scheme.
+The transmitted signal propagates through the wireless channel and is received by the SRX882 superheterodyne receiver. The receiver converts the RF signal into digital HIGH/LOW states. The ESP32 utilizes hardware interrupts to measure the duration of these states in microseconds, packing 64 consecutive transitions into a JSON line sent over USB Serial.
+The AI layer receives these 1D interval vectors and predicts the identity of the transmitter. The output includes a predicted device, confidence score, and Mahalanobis distance metric.
+The backend manages the pipeline and exposes REST APIs and WebSockets to the frontend. The frontend provides researchers with a unified interface for live signal inspection, device registration, dataset management, and authentication monitoring. In production deployment, the AI layer is quantized (TinyML) and pushed to the ESP32, which then publishes alerts directly via MQTT.
+
+7. Hardware Architecture
+The central receiving device is an ESP32-WROOM-32 microcontroller paired with an SRX882 Superheterodyne 433 MHz receiver module. The SRX882 provides excellent stability and noise rejection compared to cheaper regenerative receivers.
+Multiple physical transmitters will be used, specifically 433 MHz EV1527 learning code remote key fobs, and an active ESP32 paired with an STX882 transmitter to generate custom bursts.
+The experimental setup will include coiled copper spring antennas, solderless breadboards, and Dupont jumper wires. Power will be supplied via USB.
+This setup represents a significant cost reduction from traditional RF fingerprinting rigs, bringing the total hardware cost for a multi-device testbed to under ₹1,500 INR.
+
+8. RF Data Acquisition & Data Format
+The ESP32 receiver continuously monitors its data pin. Through a digital squelch mechanism, it filters out ambient thermal noise (e.g., pulses < 120µs). Upon detecting a valid preamble, it records a sequence of 64 microsecond intervals (alternating HIGH and LOW states).
+These timing vectors are sent to the host computer as JSON Lines (.jsonl). A typical record includes the transmitter identifier and the array of intervals:
+{"device_id": "DEV_A", "intervals": [502, 248, 501, 252, 998, 249, ...]}
+Each recording will be stored together with metadata, separating captures by session, distance, and orientation to prevent temporal data leakage during model training.
+
+9. RF Hardware Impairment Analysis (Pulse Timing)
+In ASK/OOK systems, hardware imperfections manifest directly in the timing of the demodulated pulses:
+Clock Skew (Oscillator Drift): The actual clock frequency of the transmitter crystal differs slightly from the ideal rate. This causes the overall duration of pulses to be consistently stretched or compressed.
+Duty Cycle Distortion: Differences in transistor turn-on and turn-off times cause asymmetries between the HIGH pulse durations and LOW gap durations.
+Pulse Jitter: Short-term instability in the oscillator and internal noise create random microsecond-level variations around the expected pulse lengths.
+Transient Behaviour: The initial pulses of a transmission often exhibit different timing characteristics as the transmitter's capacitors charge and the oscillator stabilizes.
+The 1D CNN model is designed to extract and learn these specific temporal hardware signatures from the 64-element interval vectors.
+
+10. Deep-Learning Methodology
+The AI component centers on a lightweight PulseTimingResNet—a 1D Residual Convolutional Neural Network.
+The network processes the 64-element interval vectors directly. The 1D convolutional filters slide along the timeline to detect specific hardware patterns like clock skew and duty-cycle distortion.
+The architecture is intentionally shallow so that the final compiled model size remains under 50 KB, allowing it to fit into the ESP32's SRAM.
+The system is trained using a Triplet Margin Loss optimizer. This teaches the AI to map signatures from the same device close together in the embedding space (forming a tight cluster) while pushing signatures from different devices far apart.
+
+11. Device Authentication Mechanism
+A standard classification system always chooses one of its known classes, which is unsuitable for security because an unknown transmitter could be assigned to whichever registered device it most resembles.
+The proposed system includes an explicit authentication layer using Mahalanobis Distance.
+After training, the system calculates the mathematical centroid and covariance matrix of each authorized device's cluster in the embedding space. When a new transmission is received, the distance from its embedding to the claimed device's centroid is computed.
+If the distance is within a strict safety boundary (e.g., 99% confidence interval), the signal is authenticated. If the distance exceeds the threshold, the system rejects it as a spoofed or unknown transmitter, triggering a security alert.
+
+12. Experimental Methodology
+The experimental design involves controlled captures and robustness testing.
+The first phase collects nominal data (devices at 1 meter, identical orientation) to establish baseline separability.
+The second phase tests distance and orientation invariance. Transmitters are recorded at 5 meters and rotated 90 degrees to ensure the model learns the hardware fingerprint rather than multipath channel artifacts.
+The third phase involves cross-session testing, collecting data on different days to evaluate the stability of the fingerprint against temperature changes and component aging.
+Finally, unknown-device rejection is tested by introducing a new physical transmitter that was entirely excluded from the training dataset, verifying that the Mahalanobis distance correctly flags it as an anomaly.
+
+13. Backend and Frontend Architecture
+The backend is developed using Python and FastAPI, managing the serial connection to the ESP32, datasets, model training, and experiment logs. SQLite is used for relational data (devices, experiment metadata).
+The frontend functions as a professional RF research console built with modern web technologies (React/Next.js). It provides a dark-theme engineering UI displaying:
+- A Live Telemetry Dashboard showing pulse jitter metrics, clock skew, and live authentication decisions.
+- A Device Registry for managing authorized hardware.
+- Simulated DSP panels (FFT spectrums, waterfalls) to provide traditional RF visualizations even when operating on pure timing data.
+
+14. Expected Deliverables
+The final project will produce a working ultra-low-cost RF acquisition system based on the ESP32 and SRX882, a labelled multi-device pulse-timing dataset, a trained 1D ResNet model, an open-set authentication mechanism, and a full-stack web dashboard.
+The ultimate deliverable is the TinyML edge deployment: the quantized model running directly on the ESP32, classifying signals locally and publishing MQTT alerts upon detecting spoofing attempts.
+
+15. Expected Contribution
+The strongest contribution of this project lies in demonstrating that highly secure, physical-layer RF fingerprinting can be achieved using extremely cheap, accessible microcontroller hardware (ESP32) rather than expensive laboratory SDR platforms.
+It shifts the focus from analyzing complex IQ waveforms in the frequency domain to analyzing microsecond-precision timing jitter in the temporal domain, proving that ASK/OOK transmitters possess unique, unforgeable hardware timing signatures that can be authenticated locally on edge devices.

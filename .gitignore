@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+tests/_build/
+
+# runtime data (keep out of version control)
+phyauth.db
+checkpoints/
+data/*.jsonl
+data/sim/
+
+# firmware build output
+firmware/*/.pio/
+
+# frontend
+frontend/node_modules/
+frontend/.next/
+
+# LaTeX build artifacts
+Report/latex/*.aux
+Report/latex/*.log
+Report/latex/*.out
+Report/latex/*_preview.png
+
+# misc
+.DS_Store
+_backup_pre_v2.tar.gz
+.claude/

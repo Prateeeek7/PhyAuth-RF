@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="2200" height="1820" viewBox="0 0 2200 1820" font-family="Helvetica, Arial, sans-serif">
+  <rect width="2200" height="1820" fill="#ffffff"/>
+  <!-- photo 562x784 shown at 2x, origin (538, 120) -->
+  <image x="538" y="120" width="1124" height="1568" xlink:href="photo_nodes.png" preserveAspectRatio="none"/>
+  <rect id="photo-edge" x="530" y="112" width="1140" height="18" fill="#ffffff"/>
+
+  <text x="1100" y="62" text-anchor="middle" font-size="40" font-weight="bold" fill="#111">PhyAuth-RF hardware: transmitter node and receiver node</text>
+
+  <defs>
+    <marker id="dot" markerWidth="12" markerHeight="12" refX="6" refY="6"><circle cx="6" cy="6" r="5" fill="#d32f2f"/></marker>
+  </defs>
+  <g stroke="#d32f2f" stroke-width="3" fill="none" marker-end="url(#dot)">
+    <!-- transmitter node (top group) -->
+    <polyline points="1720,250 1300,250 1258,330"/>          <!-- STX882 antenna  (360,105) -->
+    <polyline points="1720,420 1340,420 1300,560"/>          <!-- STX882 module   (381,220) -->
+    <polyline points="1720,590 1400,590 1210,700"/>          <!-- jumper wires    (336,290) -->
+    <polyline points="480,560 820,560 958,700"/>             <!-- ESP32 board     (210,290) -->
+    <polyline points="480,800 640,800 688,758"/>             <!-- USB port        ( 75,319) -->
+    <polyline points="480,1000 600,1000 700,925"/>           <!-- breadboard      ( 81,402) -->
+    <!-- receiver node (bottom group) -->
+    <polyline points="1720,880 1560,880 1520,960"/>          <!-- SRX882 antenna  (491,420) -->
+    <polyline points="1720,1180 1600,1180 1530,1230"/>       <!-- SRX882 module   (496,555) -->
+    <polyline points="1720,1420 1440,1420 1360,1330"/>       <!-- jumper wires    (411,605) -->
+    <polyline points="480,1240 900,1240 1150,1330"/>         <!-- ESP32 board     (306,605) -->
+    <polyline points="480,1470 760,1470 838,1384"/>          <!-- USB-C port      (150,632) -->
+  </g>
+
+  <g font-size="30" fill="#111">
+    <text x="1735" y="245" font-weight="bold">Spring antenna</text>
+    <text x="1735" y="281" font-size="25" fill="#444">433.92 MHz, on STX882 ANT pad</text>
+
+    <text x="1735" y="415" font-weight="bold">STX882 ASK transmitter</text>
+    <text x="1735" y="451" font-size="25" fill="#444">3 pins: DATA, VCC, GND</text>
+
+    <text x="1735" y="585" font-weight="bold">Jumper wires</text>
+    <text x="1735" y="621" font-size="25" fill="#444">DATA → GPIO4, VCC → 5 V, GND</text>
+
+    <text x="470" y="555" text-anchor="end" font-weight="bold">ESP32 dev board</text>
+    <text x="470" y="591" text-anchor="end" font-size="25" fill="#444">transmitter / attacker MCU</text>
+    <text x="470" y="623" text-anchor="end" font-size="25" fill="#444">RMT encoder, 100 ns timing</text>
+
+    <text x="470" y="795" text-anchor="end" font-weight="bold">USB port</text>
+    <text x="470" y="831" text-anchor="end" font-size="25" fill="#444">power + commands, 115200 Bd</text>
+
+    <text x="470" y="995" text-anchor="end" font-weight="bold">Breadboard</text>
+    <text x="470" y="1031" text-anchor="end" font-size="25" fill="#444">solderless prototyping</text>
+
+    <text x="1735" y="875" font-weight="bold">Spring antenna</text>
+    <text x="1735" y="911" font-size="25" fill="#444">upright, touching nothing</text>
+
+    <text x="1735" y="1175" font-weight="bold">SRX882 superhet receiver</text>
+    <text x="1735" y="1211" font-size="25" fill="#444">4 pins: VCC, GND, DATA, CS</text>
+
+    <text x="1735" y="1415" font-weight="bold">Jumper wires</text>
+    <text x="1735" y="1451" font-size="25" fill="#444">DATA → GPIO14, VCC/CS → 3V3, GND</text>
+
+    <text x="470" y="1235" text-anchor="end" font-weight="bold">ESP32 dev board</text>
+    <text x="470" y="1271" text-anchor="end" font-size="25" fill="#444">receiver / verifier MCU</text>
+    <text x="470" y="1303" text-anchor="end" font-size="25" fill="#444">4.17 ns edge timing, on-chip model</text>
+
+    <text x="470" y="1465" text-anchor="end" font-weight="bold">USB-C port</text>
+    <text x="470" y="1501" text-anchor="end" font-size="25" fill="#444">power + data, 921600 Bd</text>
+  </g>
+
+  <!-- group tags -->
+  <g font-size="28" font-weight="bold">
+    <rect x="80" y="160" width="400" height="56" rx="8" fill="#fde7e7" stroke="#c62828" stroke-width="2"/>
+    <text x="280" y="198" text-anchor="middle" fill="#b71c1c">TRANSMITTER NODE</text>
+    <rect x="80" y="1080" width="400" height="56" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="2"/>
+    <text x="280" y="1118" text-anchor="middle" fill="#0d47a1">RECEIVER NODE</text>
+  </g>
+
+  <text x="1100" y="1770" text-anchor="middle" font-size="24" fill="#555">Both nodes on solderless breadboards. Chip types as detected over USB: receiver = ESP32-D0WD-V3 (classic ESP32), transmitter = ESP32-S3 (16 MB flash).</text>
+</svg>

@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="3000" height="1640" viewBox="0 0 3000 1640" font-family="Helvetica, Arial, sans-serif">
+  <rect width="3000" height="1640" fill="#ffffff"/>
+  <text x="1400" y="70" text-anchor="middle" font-size="42" font-weight="bold" fill="#111">Genuine device: QC5681 two-button 433 MHz remote (EV1527)</text>
+
+  <!-- front: 641x1328 at 0.95 -> origin (560,150); back: 1278x1156 at 0.85 -> origin (1300,330) -->
+  <image x="330" y="120" width="953" height="1269" xlink:href="remote_front_clean.png"/>
+  <image x="1300" y="330" width="1086" height="983" xlink:href="remote_back_white.png"/>
+
+  <defs><marker id="dot" markerWidth="12" markerHeight="12" refX="6" refY="6"><circle cx="6" cy="6" r="5" fill="#d32f2f"/></marker></defs>
+  <g stroke="#d32f2f" stroke-width="3" fill="none" marker-end="url(#dot)">
+    <polyline points="520,484 640,484 708,484"/>     <!-- front antenna -->
+    <polyline points="520,634 760,634 812,634"/>     <!-- LED -->
+    <polyline points="520,744 720,744 777,744"/>     <!-- ON -->
+    <polyline points="520,854 720,854 777,854"/>     <!-- OFF -->
+    <polyline points="520,1100 640,1100 684,1060"/>   <!-- housing -->
+    <polyline points="2440,407 2100,407 2030,407"/>  <!-- back antenna -->
+    <polyline points="2440,640 2200,640 1990,700"/>  <!-- body / PCB inside -->
+    <polyline points="2440,1060 2290,1060 2230,1053"/> <!-- battery -->
+    <polyline points="2440,1250 2100,1250 1960,1140"/> <!-- compartment -->
+    <polyline points="1480,1450 1480,1300 1521,1080"/> <!-- cover -->
+  </g>
+
+  <g font-size="30" fill="#111">
+    <text x="510" y="479" text-anchor="end" font-weight="bold">Telescopic antenna</text>
+    <text x="510" y="514" text-anchor="end" font-size="25" fill="#444">433.92 MHz radiator</text>
+    <text x="510" y="629" text-anchor="end" font-weight="bold">Transmit LED</text>
+    <text x="510" y="664" text-anchor="end" font-size="25" fill="#444">lights while sending</text>
+    <text x="510" y="739" text-anchor="end" font-weight="bold">ON button</text>
+    <text x="510" y="774" text-anchor="end" font-size="25" fill="#444">code 0x936768 (key 8)</text>
+    <text x="510" y="849" text-anchor="end" font-weight="bold">OFF button</text>
+    <text x="510" y="884" text-anchor="end" font-size="25" fill="#444">code 0x936764 (key 4)</text>
+    <text x="510" y="1095" text-anchor="end" font-weight="bold">Housing</text>
+    <text x="510" y="1130" text-anchor="end" font-size="25" fill="#444">EV1527 encoder + RF stage inside</text>
+
+    <text x="2455" y="402" font-weight="bold">Antenna</text>
+    <text x="2455" y="635" font-weight="bold">Back shell (PCB inside)</text>
+    <text x="2455" y="670" font-size="25" fill="#444">encoder IC + keyed RF oscillator:</text>
+    <text x="2455" y="702" font-size="25" fill="#444">source of the physical fingerprint</text>
+    <text x="2455" y="1055" font-weight="bold">23A battery</text>
+    <text x="2455" y="1090" font-size="25" fill="#444">12 V alkaline</text>
+    <text x="2455" y="1245" font-weight="bold">Battery compartment</text>
+    <text x="2455" y="1280" font-size="25" fill="#444">spring contact</text>
+    <text x="1480" y="1490" text-anchor="middle" font-weight="bold">Battery cover (removed)</text>
+  </g>
+
+  <g font-size="28" fill="#333" text-anchor="middle">
+    <text x="806" y="1420">(a) Front</text>
+    <text x="1843" y="1365">(b) Back, battery cover removed</text>
+  </g>
+
+  <rect x="200" y="1530" width="2400" height="70" rx="10" fill="#f5f5f5" stroke="#bdbdbd"/>
+  <text x="1400" y="1575" text-anchor="middle" font-size="26" fill="#222">EV1527 fixed (learning) code · ASK/OOK at 433.92 MHz · 24-bit frame = 20-bit address 0x93676 + 4-bit key · measured T ≈ 335 µs · sync gap 31 T</text>
+</svg>

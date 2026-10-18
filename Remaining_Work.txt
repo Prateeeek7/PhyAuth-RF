@@ -1,0 +1,323 @@
+================================================================================
+          RFPRINT PLATFORM: HARDWARE PROVISIONING & DEPLOYMENT MANUAL
+================================================================================
+Document ID : RFPRINT-PROV-002
+Revision    : 2.0.0
+Author      : Team Shannon (Antigravity AI Pair Programmer)
+Hardware    : ESP32-WROOM-32 (30-pin CP2102) + STX882 TX + SRX882 RX
+
+This document outlines the complete bill of materials, hardware wiring diagrams,
+firmware sketches, calibration steps, data collection protocols, model training
+workflows, and edge deployment procedures required to transition the RFPrint
+platform from simulated telemetry to physical RF hardware authentication.
+
+Hardware fingerprinting method: Clock Skew & Pulse Timing Jitter.
+Data format: JSON Lines (.jsonl) over USB Serial (not SigMF / not RTL-SDR).
+
+================================================================================
+1. LAB KIT SHOPPING LIST (INDIAN MARKET PROCUREMENT)
+================================================================================
+Definitive, confirmed shopping list for the 2-device pulse timing rig.
+
+  #  Item                                         Qty   Unit Cost    Total
+  ─────────────────────────────────────────────────────────────────────────
+  1  ESP32-WROOM-32 Dev Board (30-pin CP2102)      2     ₹375        ₹750
+     QuartzComponents / Robu.in / Amazon.in
+     ↳ 1 unit = Receiver Node (SRX882 + AI model)
+     ↳ 1 unit = Transmitter Node (STX882 burst generation)
+
+  2  STX882 ASK Transmitter + SRX882               1     ₹183        ₹183
+     Superheterodyne Receiver Module Pair
+     (includes 2 coiled copper spring antennas)
+     Robu.in SKU: 51982 / QuartzComponents
+
+  3  RF 433 MHz 2-Button Remote Control Key Fob    1     ₹160        ₹160
+     with EV1527 Learning Code Encoder (Transmitter A)
+     QuartzComponents SKU: MOD-QC5681
+
+  4  Solderless Breadboard (830 Tie-Points)        2     ₹70         ₹140
+     Robu.in / QuartzComponents
+
+  5  Dupont Jumper Wires (Male-to-Female pack)     1     ₹100        ₹100
+     Robu.in / QuartzComponents
+
+  6  Micro USB Data Cables (data-capable, not      2     ₹75         ₹150
+     charging-only — needed for firmware flashing)
+     Local electronics market / Robu.in
+  ─────────────────────────────────────────────────────────────────────────
+  TOTAL CONFIRMED BUDGET: ~₹1,483 INR
+  ─────────────────────────────────────────────────────────────────────────
+
+NOTE: The CC1101 transceiver and Arduino Uno (originally Transmitter C) have
+been removed from the BOM. The project now uses only:
+  - 1 EV1527 Key Fob       (Transmitter A — passive, no wiring needed)
+  - 1 ESP32 + STX882 pair  (Transmitter B — active ESP32 burst node)
+  - 1 ESP32 + SRX882 pair  (Receiver Node — pulse timing capture)
+
+================================================================================
+2. WIRING SCHEMATICS & MICROCONTROLLER FIRMWARE
+================================================================================
+
+A. RECEIVER NODE: ESP32-WROOM-32 + SRX882 Superheterodyne Receiver
+   ─────────────────────────────────────────────────────────────────
+   Power the SRX882 from the ESP32's 3.3V output pin. This ensures the SRX882
+   DATA pin output level (3.3V logic HIGH) directly matches the ESP32 GPIO
+   input threshold — no level shifter required.
+
+   Wiring:
+   [ ESP32-WROOM-32 (30-pin) ]           [ SRX882 RECEIVER MODULE ]
+   Pin 3V3  (3.3V output) ─────────────► VCC  (power input)
+   Pin GND  (Ground)      ─────────────► GND  (ground)
+   Pin IO14 (GPIO14, INT) ─────────────► DATA (demodulated ASK output)
+   (Solder the bundled copper spring antenna to the SRX882 ANT pad)
+
+   Receiver Firmware (Arduino C++ for ESP32):
+   ─────────────────────────────────────────
+   Flash this sketch to the Receiver ESP32 using the Arduino IDE
+   (Board: "ESP32 Dev Module", Port: your COM/ttyUSB port).
+
+   ```cpp
+   #define RX_PIN 14          // GPIO14 → SRX882 DATA pin
+   #define VECTOR_LEN 64      // Must match config.PULSE_VECTOR_LEN in Python
+   #define SQUELCH_US 120     // Ignore pulses shorter than this (noise filter)
+   #define PREAMBLE_MIN_US 500 // Minimum first HIGH to count as valid preamble
+
+   volatile uint32_t intervals[VECTOR_LEN];
+   volatile int      count = 0;
+   volatile uint32_t lastTime = 0;
+   volatile bool     packetReady = false;
+   char              deviceLabel[16] = "DEV_A"; // Change per device during collection
+
+   void IRAM_ATTR onEdge() {
+     uint32_t now = micros();
+     uint32_t dur = now - lastTime;
+     lastTime = now;
+
+     if (dur < SQUELCH_US) return;              // Noise — ignore
+     if (count == 0 && dur < PREAMBLE_MIN_US) return; // Invalid preamble
+
+     if (count < VECTOR_LEN) {
+       intervals[count++] = dur;
+     } else {
+       packetReady = true;
+       count = 0;
+     }
+   }
+
+   void setup() {
+     Serial.begin(115200);
+     pinMode(RX_PIN, INPUT);
+     attachInterrupt(digitalPinToInterrupt(RX_PIN), onEdge, CHANGE);
+   }
+
+   void loop() {
+     if (packetReady) {
+       packetReady = false;
+       Serial.print("{\"device_id\":\"");
+       Serial.print(deviceLabel);
+       Serial.print("\",\"intervals\":[");
+       for (int i = 0; i < VECTOR_LEN; i++) {
+         Serial.print(intervals[i]);
+         if (i < VECTOR_LEN - 1) Serial.print(",");
+       }
+       Serial.println("]}");
+     }
+   }
+   ```
+
+   ► Connect the Receiver ESP32 to your laptop via Micro USB.
+   ► Open config.py and set SERIAL_PORT to your port (e.g. "/dev/ttyUSB0").
+   ► The Python backend reads these JSON lines automatically.
+
+─────────────────────────────────────────────────────────────────────────────
+
+B. TRANSMITTER NODE: ESP32-WROOM-32 + STX882 ASK Transmitter
+   ──────────────────────────────────────────────────────────
+   Power the STX882 from the ESP32's 5V output pin for maximum RF output power.
+   The DATA pin operates at 3.3V logic and is directly compatible with the
+   ESP32 GPIO output voltage.
+
+   Wiring:
+   [ ESP32-S3 (N16R8) ]                  [ STX882 TRANSMITTER MODULE ]
+   Pin 5V / VIN (5V output) ────────────► VCC  (power input)
+   Pin GND      (Ground)    ────────────► GND  (ground)
+   Pin 4        (GPIO4, TX) ────────────► DATA (ASK modulation input)
+   (Solder the bundled copper spring antenna to the STX882 ANT pad)
+
+   Transmitter Firmware (Arduino C++ for ESP32-S3):
+   ────────────────────────────────────────────────
+   Status: [COMPLETED & FLASHED]
+
+   ```cpp
+   #define TX_PIN 4    // Pin 4 (GPIO4) → STX882 DATA pin
+
+   // Transmit one EV1527-style ASK burst
+   // HIGH pulses: ~500 μs, LOW pulses: ~250 μs (32 symbols + preamble)
+   void sendBurst() {
+     // Preamble (long HIGH)
+     digitalWrite(TX_PIN, HIGH);
+     delayMicroseconds(500);
+
+     // 32 data symbols (alternating HIGH/LOW with natural oscillator jitter)
+     for (int i = 0; i < 32; i++) {
+       digitalWrite(TX_PIN, (i % 2 == 0) ? HIGH : LOW);
+       delayMicroseconds(250);
+     }
+
+     // Trailing LOW (inter-frame gap)
+     digitalWrite(TX_PIN, LOW);
+   }
+
+   void setup() {
+     pinMode(TX_PIN, OUTPUT);
+     digitalWrite(TX_PIN, LOW);
+   }
+
+   void loop() {
+     sendBurst();
+     delay(500);   // Transmit 2 bursts per second
+   }
+   ```
+
+================================================================================
+3. DIGITAL SQUELCH & PHYSICAL ENVIRONMENT CALIBRATION
+================================================================================
+Before collecting training data, calibrate the receiver setup to prevent ambient
+thermal noise from the SRX882 AGC causing false interrupt triggers.
+
+Step 1 — Squelch Verification:
+   Power up the Receiver ESP32 without any transmitter active.
+   Open the Serial Monitor in Arduino IDE (115200 baud).
+   Verify that NO JSON lines are being printed.
+   If lines appear, the squelch threshold (SQUELCH_US) is too low.
+   Increase SQUELCH_US from 120 to 200 in the firmware and re-flash.
+
+Step 2 — Preamble Guard Check:
+   Press the EV1527 key fob once from 1 meter distance.
+   Verify that exactly 1 clean JSON line appears containing 64 integer values.
+   If multiple fragmented lines appear, increase PREAMBLE_MIN_US to 600.
+
+Step 3 — Distance Sanity Check:
+   Test the complete range: transmit from 1 m, 2 m, and 5 m.
+   Verify that valid JSON packets arrive at all 3 distances.
+   The copper spring antennas should provide reliable range up to ~30 m indoors.
+
+================================================================================
+4. DATA COLLECTION PROTOCOL (TIMING VECTOR SIGNATURES)
+================================================================================
+The Python backend records .jsonl timing files via the REST API.
+Each .jsonl file is one recording session for one transmitter device.
+
+File naming convention (automatically applied by the platform):
+   <session_id>_<device_id>_<timestamp>.jsonl
+   Example: session01_DEV_A_20260815_104500.jsonl
+
+Step 1 — Register Transmitter Devices in the Dashboard
+   POST /api/devices with body:
+   { "device_id": "DEV_A", "name": "EV1527 Key Fob",
+     "model_info": "433 MHz ASK Remote, EV1527 chip", "protocol": "ASK/OOK-433" }
+   { "device_id": "DEV_B", "name": "ESP32 STX882 Burst Node",
+     "model_info": "ESP32-WROOM-32 + STX882", "protocol": "ASK/OOK-433" }
+
+Step 2 — Record DEV_A (EV1527 Key Fob)
+   POST /api/experiments/record with body:
+   {
+     "experiment_name": "DEV_A nominal",
+     "serial_port": "/dev/ttyUSB0",
+     "transmitter_id": "DEV_A",
+     "duration_packets": 200,
+     "distance_meters": 1.0,
+     "orientation_deg": 0,
+     "session_id": "session01"
+   }
+   Press the key fob button repeatedly until 200 packets are collected.
+
+Step 3 — Record DEV_B (ESP32 Burst Node)
+   Plug the Transmitter ESP32 into power. It will transmit automatically.
+   POST /api/experiments/record with "transmitter_id": "DEV_B", session_id: "session01".
+   Wait until 200 packets are collected (takes ~100 seconds at 2 bursts/second).
+
+Step 4 — Channel Variant Captures
+   Repeat Steps 2-3 with distance_meters: 5.0 and orientation_deg: 90.
+   Assign session_id: "session02" for these captures.
+   This teaches the model to ignore distance and orientation effects.
+
+================================================================================
+5. PULSETIMINRESNET TRAINING & PROFILE CALIBRATION
+================================================================================
+Once the data/   directory contains the .jsonl timing files, run training.
+
+Python Backend — Trigger via REST API:
+   POST /api/experiments/train
+
+Or trigger directly from the command line:
+   PYTHONPATH=. ./.venv/bin/python3 -c "
+   from pathlib import Path
+   from ml.train import train_model
+   device_map = {'DEV_A': 0, 'DEV_B': 1}
+   model, auth = train_model(Path('data'), Path('checkpoints'), device_map)
+   print('Training complete.')
+   "
+
+Training Hyperparameters (set in config.py):
+   EMBEDDING_DIM          = 64
+   BATCH_SIZE             = 64
+   EPOCHS                 = 50
+   LEARNING_RATE          = 0.001
+   JITTER_AUGMENT_STD_US  = 2.0   (Gaussian augmentation σ = 2 μs)
+
+Training Output Files (saved to checkpoints/ directory):
+   checkpoints/best_model.pt                — PyTorch state dict of best epoch
+   checkpoints/authenticator_profiles.pkl   — Mahalanobis centroids and covariance
+
+Expected Training Performance (2-class scenario):
+   Validation Accuracy: > 95%
+   False Acceptance Rate (FAR): < 1%
+   Inference Latency: < 1.2 ms on ESP32 (after TFLite quantization)
+
+================================================================================
+6. PRODUCTION EDGE DEPLOYMENT (TINYML ON ESP32)
+================================================================================
+After training, the PulseTimingResNet can be quantized and deployed directly
+to the ESP32 Receiver Node for standalone (offline) authentication.
+
+Step 1 — Install TFLite Conversion Dependencies:
+   ./.venv/bin/pip install tensorflow
+
+Step 2 — Export PyTorch → ONNX → TFLite:
+   PYTHONPATH=. ./.venv/bin/python3 -c "
+   import torch
+   from ml.models import PulseTimingResNet
+   import config
+
+   model = PulseTimingResNet(embedding_dim=config.EMBEDDING_DIM, num_classes=2)
+   model.load_state_dict(torch.load('checkpoints/best_model.pt'))
+   model.eval()
+
+   dummy = torch.randn(1, 1, 64)
+   torch.onnx.export(model, (dummy,), 'checkpoints/pulse_model.onnx',
+                     input_names=['intervals'], output_names=['embedding','logits'],
+                     opset_version=13)
+   print('ONNX export complete: checkpoints/pulse_model.onnx')
+   "
+
+Step 3 — Flash and Test (EloquentTinyML on ESP32):
+   Convert the ONNX model using netron.app to inspect layer shapes, then use
+   the EloquentTinyML Arduino library to embed the quantized weights directly
+   as a C++ header file and flash it to the Receiver ESP32.
+   Inference on the ESP32 runs in < 1.2 ms with < 4 KB RAM usage.
+
+Step 4 — MQTT Alert Integration:
+   Configure the ESP32's WiFi SSID and password in the firmware.
+   When the on-chip AI rejects a signal (Mahalanobis distance > threshold),
+   the ESP32 publishes a JSON alert to the local MQTT broker:
+   {
+     "timestamp": "2026-08-15T10:00:00Z",
+     "event": "RF_SPOOFING_ALERT",
+     "predicted_class": "UNKNOWN",
+     "confidence": 0.12,
+     "mahalanobis_distance": 18.74,
+     "pulse_jitter_rms": 9.22,
+     "clock_skew_us": -3.1
+   }
+================================================================================
