@@ -151,6 +151,8 @@ class Hub:
         self.training: Dict = {"status": "IDLE", "progress": {}, "error": "", "report_ready": False}
         self._sim_driver: Optional[threading.Thread] = None
         self.sim_autoplay = True          # user preference, restored after recordings
+        self.lock_state: Optional[Dict] = None   # last "lock" report from the receiver
+        self.lock_events: deque = deque(maxlen=100)
         self._exec = ThreadPoolExecutor(max_workers=1, thread_name_prefix="infer")
         self._tasks: List[asyncio.Task] = []
         self._sub_id: Optional[int] = None
@@ -254,6 +256,12 @@ class Hub:
                            "drift_ppm": msg.get("drift_ppm") if msg.get("live", -1) != -1 else None,
                            "liveness": {1: "ok", 0: "no start-up drift"}.get(msg.get("live", -1))}
                     await self._handle_decision(dec, source="edge")
+                elif t == "lock":   # pattern lock running on the ESP32
+                    msg = {**msg, "time": time.time()}
+                    self.lock_state = msg
+                    if msg.get("event") not in (None, "none"):
+                        self.lock_events.appendleft(msg)
+                    await self.broadcast(msg)
                 elif t in ("stats", "hello", "ack", "err"):
                     await self.broadcast({**msg, "type": f"rx_{t}"})
             except Exception as exc:
@@ -394,6 +402,8 @@ class Hub:
             devs = s.exec(select(Device)).all()
         enrolled = [d.device_id for d in devs if d.is_authorized]
         codes = {d.device_id: d.code or "" for d in devs}
+        from tools._registry import variants_from
+        variants = variants_from(devs)
         self.training = {"status": "RUNNING", "progress": {"stage": "starting"}, "error": "",
                          "report_ready": False, "started": time.time()}
 
@@ -404,7 +414,8 @@ class Hub:
                 self.training["progress"] = p
                 self.broadcast_threadsafe({"type": "training", **self.training})
             try:
-                train_pipeline(config.DATA_DIR, config.CHECKPOINT_DIR, enrolled, codes, epochs=epochs, progress=prog)
+                train_pipeline(config.DATA_DIR, config.CHECKPOINT_DIR, enrolled, codes, epochs=epochs, progress=prog,
+                               variants=variants)
                 self.engine.load()
                 self.refresh_registry()
                 self.training.update({"status": "COMPLETED", "report_ready": True})

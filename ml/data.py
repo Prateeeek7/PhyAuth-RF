@@ -46,6 +46,8 @@ _HIGH_IDX = [FEATURE_NAMES.index(n) for n in ("duty_short_high", "duty_long_high
                                               "first_edge_resid", "tail_high_resid")]
 _LOW_IDX = [FEATURE_NAMES.index(n) for n in ("duty_short_low", "duty_long_low")]
 _T_IDX = FEATURE_NAMES.index("clock_T_us")
+_HJ_IDX = FEATURE_NAMES.index("high_jitter")
+_DRIFT_IDX = FEATURE_NAMES.index("drift_ppm_per_bit")
 
 
 @dataclass
@@ -254,7 +256,13 @@ def augment(x: np.ndarray, s: np.ndarray, rng: np.random.Generator) -> Tuple[np.
     Physically motivated augmentation of one frame:
       * slicer/channel bias: HIGH residuals shift by b, LOW residuals by -b
         (what a change of distance/RSSI does to an ASK data slicer)
-      * clock drift: T scales by (1 + 0.15 %) sigma (temperature, battery)
+      * clock drift: T scales by (1 + 0.8 %) sigma. Measured on the real remote:
+        -0.66 % within one afternoon (temperature in the hand, 23A battery sag).
+        The clone copies T anyway, so identity must rest on the stable shape features.
+      * channel noise: edge jitter scales x0.5..x2 and the per-frame drift slope
+        gets extra noise. Both rise with a weaker signal (battery, distance); on the
+        real remote high_jitter rose 4.5 SD on a noisy day while the duty and edge
+        distortions (the hardware fingerprint) moved < 0.3 SD.
     """
     x = x.copy()
     s = s.copy()
@@ -263,7 +271,9 @@ def augment(x: np.ndarray, s: np.ndarray, rng: np.random.Generator) -> Tuple[np.
         x[i] += b
     for i in _LOW_IDX:
         x[i] -= b
-    x[_T_IDX] *= 1.0 + rng.normal(0.0, 0.0015)
+    x[_T_IDX] *= 1.0 + rng.normal(0.0, 0.008)
+    x[_HJ_IDX] *= float(np.exp(rng.normal(0.0, 0.35)))
+    x[_DRIFT_IDX] += rng.normal(0.0, 150.0)
     s[1] += 10.0 * b * s[2]
     s[0] += rng.normal(0.0, 0.05, size=s.shape[1]).astype(np.float32) * s[2]
     return x, s

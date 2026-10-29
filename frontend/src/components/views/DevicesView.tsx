@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
-import { api, Device } from '../../lib/api';
-import { Badge, Field, Notify, Panel } from '../ui';
+import { api } from '../../lib/api';
+import { useApp } from '../shell/AppContext';
+import { Badge, Field, PageHead, Panel } from '../ui';
 
 const EMPTY = { device_id: '', name: '', model_info: 'EV1527 433 MHz key fob', is_authorized: true, kind: 'fob', code: '' };
 
-export function DevicesView({ devices, reload, notify }: { devices: Device[]; reload: () => void; notify: Notify }) {
+export function DevicesView() {
+  const { devices, reloadDevices: reload, notify } = useApp();
   const [form, setForm] = useState(EMPTY);
 
   const create = async () => {
@@ -34,7 +36,9 @@ export function DevicesView({ devices, reload, notify }: { devices: Device[]; re
   };
 
   return (
-    <div className="grid-2">
+    <>
+      <PageHead title="Devices" sub="The registry of transmitters: who is enrolled, and which code each one claims." />
+      <div className="split-side">
       <Panel title="Register transmitter">
         <div className="form-grid">
           <Field label="Device ID (A-Z, 0-9, _)">
@@ -55,6 +59,7 @@ export function DevicesView({ devices, reload, notify }: { devices: Device[]; re
               <option value="emulated">Emulated (ESP32 profile)</option>
               <option value="attacker">Attacker / clone</option>
               <option value="unknown">Unknown (unenrolled fob)</option>
+              <option value="variant">Same remote, other button</option>
             </select>
           </Field>
           <Field label="Enrolled (authorized)">
@@ -73,8 +78,8 @@ export function DevicesView({ devices, reload, notify }: { devices: Device[]; re
         </p>
       </Panel>
 
-      <Panel title="Registry">
-        <div className="table-scroll">
+      <Panel title="Registry" sub={`${devices.length} devices`} flush>
+        <div>
           <table className="eng-table">
             <thead><tr><th>ID</th><th>name</th><th>type</th><th>code (claim)</th><th>enrolled</th><th /></tr></thead>
             <tbody>
@@ -99,8 +104,9 @@ export function DevicesView({ devices, reload, notify }: { devices: Device[]; re
             </tbody>
           </table>
         </div>
-        <p className="hint" style={{ marginTop: 6 }}>Changing enrollment takes effect for profiles after the next training run.</p>
+        <p className="hint" style={{ padding: "10px 16px", borderTop: "1px solid var(--grid-color)" }}>Changing enrollment takes effect for profiles after the next training run.</p>
       </Panel>
-    </div>
+      </div>
+    </>
   );
 }

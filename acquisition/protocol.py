@@ -46,7 +46,7 @@ def normalize(msg: Dict) -> Optional[Dict]:
         msg.setdefault("t_us", None)
         msg["n"] = len(msg["d"])
         return msg
-    if t in ("hello", "stats", "auth", "ack", "err", "tx"):
+    if t in ("hello", "stats", "auth", "ack", "err", "tx", "lock"):
         return msg
     if "intervals" in msg and isinstance(msg["intervals"], list):
         d = [int(v) * 1000 for v in msg["intervals"] if v and v > 0]

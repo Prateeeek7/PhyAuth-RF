@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { api, Device, HubStatus, RecordingStatus, SimDevice } from '../../lib/api';
-import { Badge, Field, Kpi, Notify, Panel } from '../ui';
+import { api, RecordingStatus, SimDevice } from '../../lib/api';
+import { useApp } from '../shell/AppContext';
+import { Badge, Field, Kpi, PageHead, Panel } from '../ui';
 
 interface Experiment {
   id: number;
@@ -26,7 +27,10 @@ interface DatasetSummary {
   files: string[];
 }
 
-export function CaptureView({ status, devices, recording, notify }: { status: HubStatus | null; devices: Device[]; recording: RecordingStatus | null; notify: Notify }) {
+export function CaptureView() {
+  const { live, devices, notify, online } = useApp();
+  const status = live.status;
+  const recording = live.recording;
   const sim = status?.simulation;
   const [form, setForm] = useState({
     device_id: '', session_id: 's01', experiment_name: 'capture', distance_m: 1, orientation_deg: 0,
@@ -43,7 +47,7 @@ export function CaptureView({ status, devices, recording, notify }: { status: Hu
     api.get<DatasetSummary>('/api/recordings/dataset').then(setSummary).catch(() => undefined);
   }, []);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => { reload(); }, [reload, online]);
   useEffect(() => {
     const poll = () => api.get<{ connected: boolean }>('/api/attack/status').then((r) => setTxConnected(r.connected)).catch(() => undefined);
     poll();
@@ -54,7 +58,7 @@ export function CaptureView({ status, devices, recording, notify }: { status: Hu
     if (sim) api.get<SimDevice[]>('/api/hardware/sim/devices').then(setSimDevs).catch(() => undefined);
   }, [sim]);
   const active = recording && recording.state === 'recording' ? recording : null;
-  const deviceId = form.device_id || devices[0]?.device_id || '';
+  const deviceId = form.device_id || devices.find((d) => d.is_authorized && d.code)?.device_id || devices[0]?.device_id || '';
   useEffect(() => {
     if (recording && recording.state !== 'recording') {
       reload();
@@ -100,8 +104,10 @@ export function CaptureView({ status, devices, recording, notify }: { status: Hu
   const sessionsPerDevice = summary ? Object.values(summary.devices).map((d) => d.sessions.length) : [];
 
   return (
-    <div className="grid-2">
-      <Panel title="Record labelled frames">
+    <>
+      <PageHead title="Capture" sub="Record labelled button presses for training and testing. Code-lock keeps other 433 MHz devices out of the data." />
+      <div className="split-side stretch">
+      <Panel title="Record labelled frames" sub="One device, one session, one distance per recording">
         {!devices.length && <p className="hint">Register transmitters in the <b>Devices</b> tab first.</p>}
         <div className="form-grid">
           <Field label="Transmitter">
@@ -132,8 +138,8 @@ export function CaptureView({ status, devices, recording, notify }: { status: Hu
             </Field>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <button className="eng-btn eng-btn-primary" disabled={!!active || !devices.length} onClick={start}>Start recording</button>
+        <div className="btn-row" style={{ marginTop: 14 }}>
+          <button className="eng-btn eng-btn-primary lg" disabled={!!active || !devices.length} onClick={start}>Start recording</button>
           <button className="eng-btn eng-btn-danger" disabled={!active} onClick={stop}>Stop</button>
         </div>
         {dev && (
@@ -142,10 +148,9 @@ export function CaptureView({ status, devices, recording, notify }: { status: Hu
               : <>The code of {dev.device_id} is not known yet. It is learned from this recording and locked after 8 consistent frames.</>}
           </p>
         )}
-        {recording && <RecordingProgress r={recording} />}
-
-        <div style={{ borderTop: '1px solid var(--grid-color)', marginTop: 12, paddingTop: 10 }}>
-          <div className="eng-label">ESP32 transmitter node (one board plays EMU_1..3 and the clone)</div>
+        <div className="divider" />
+        <div>
+          <div className="section-label">ESP32 transmitter node (one board plays EMU_1..3 and the clone)</div>
           {txConnected ? (
             <>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -173,34 +178,46 @@ export function CaptureView({ status, devices, recording, notify }: { status: Hu
         </div>
       </Panel>
 
-      <Panel title="Dataset" right={<button className="eng-btn" onClick={reload}>Refresh</button>}>
+      <div className="stack fill-col">
+      {recording && (
+        <Panel title="Recording progress" sub={`${recording.device_id} · session ${recording.session_id}`}>
+          <RecordingProgress r={recording} />
+        </Panel>
+      )}
+      <Panel className="grow" title="Dataset" sub="Usable frames on disk, after the quality gate" right={<button className="eng-btn" onClick={reload}>Refresh</button>}>
         {summary && (
           <>
-            <div className="kpi-row">
+            <div className="kpi-row" style={{ marginTop: 0 }}>
               <Kpi label="usable frames" value={summary.frames} />
               <Kpi label="files" value={summary.files.length} />
               <Kpi label="split" value={sessionsPerDevice.length && Math.min(...sessionsPerDevice) >= 2 ? 'cross-session' : 'temporal'}
                 hint="With ≥2 sessions per device the newest session becomes the test set" />
             </div>
-            <table className="eng-table" style={{ marginTop: 8 }}>
-              <thead><tr><th>device</th><th>frames</th><th>presses</th><th>sessions</th><th>code</th><th>rejected</th></tr></thead>
+            <div className="table-scroll" style={{ marginTop: 12 }}>
+            <table className="eng-table">
+              <thead><tr><th>Device</th><th className="num">Frames</th><th className="num">Presses</th><th>Sessions</th><th>Code</th><th>Rejected</th></tr></thead>
               <tbody>
                 {Object.entries(summary.devices).map(([d, s]) => (
                   <tr key={d}>
-                    <td>{d}</td><td>{s.frames}</td><td>{s.bursts}</td><td>{s.sessions.join(', ')}</td><td><code>{s.top_code}</code></td>
+                    <td style={{ fontWeight: 600 }}>{d}</td><td className="num">{s.frames}</td><td className="num">{s.bursts}</td><td>{s.sessions.join(', ')}</td><td><code>{s.top_code}</code></td>
                     <td className="hint">{Object.entries(s.rejected).map(([k, v]) => `${k}:${v}`).join(' ')}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           </>
         )}
+      </Panel>
+      </div>
+      </div>
+
+      <Panel title="Protocol for credible results">
         <div className="checklist">
-          <div className="eng-label">Protocol for credible results</div>
           <ol>
-            <li>≥ 150 good frames (≈15 presses) per device per session. Use the <i>same button</i> of the remote every time.</li>
+            <li>≥ 150 good frames (≈15 presses) per device per session. Record <i>every button</i> the remote is used with (ON and OFF: the lock pattern uses both).</li>
             <li>≥ 2 sessions per device on different days or times (temperature and battery drift). This enables cross-session testing.</li>
-            <li>Vary the distance (1 m, 3 m, 5 m) and orientation (0°, 90°) within sessions, so the model learns hardware, not channel.</li>
+            <li>Vary the distance across the working range (0.75 m, 1 m, 1.25 m with the SRX882 spring antenna) and how the remote is held, so the model learns hardware, not channel.</li>
             <li>With one remote: enroll FOB_A plus EMU_1 and EMU_2 (ESP32 node profiles) so training has ≥ 2 classes.</li>
             <li>Record CLONE_A (node replaying FOB_A) and EMU_3 as <i>not enrolled</i>. They are used only as zero-shot attackers in testing.</li>
             <li>Release the button between presses: every press must start the remote from cold (liveness).</li>
@@ -208,10 +225,10 @@ export function CaptureView({ status, devices, recording, notify }: { status: Hu
         </div>
       </Panel>
 
-      <Panel title="Recordings" style={{ gridColumn: '1 / -1' }}>
-        <div className="table-scroll">
+      <Panel title="Recordings" sub="Made through this dashboard" flush>
+        <div className="table-scroll tall">
           <table className="eng-table">
-            <thead><tr><th>time</th><th>device</th><th>session</th><th>dist</th><th>orient</th><th>good / total</th><th>code</th><th>T (µs)</th><th>source</th><th>file</th><th /></tr></thead>
+            <thead><tr><th>Time</th><th>Device</th><th>Session</th><th className="num">Dist</th><th className="num">Orient</th><th className="num">Good / total</th><th>Code</th><th className="num">T (µs)</th><th>Source</th><th>File</th><th /></tr></thead>
             <tbody>
               {recs.map((r) => (
                 <tr key={r.id}>
@@ -224,25 +241,25 @@ export function CaptureView({ status, devices, recording, notify }: { status: Hu
                   <td><button className="eng-btn" onClick={() => del(r.id)}>Delete</button></td>
                 </tr>
               ))}
-              {!recs.length && <tr><td colSpan={11} className="hint">No recordings yet</td></tr>}
+              {!recs.length && <tr><td colSpan={11} className="empty">No recordings yet</td></tr>}
             </tbody>
           </table>
         </div>
       </Panel>
-    </div>
+    </>
   );
 }
 
 function RecordingProgress({ r }: { r: RecordingStatus }) {
   const frac = Math.min(1, r.frames_good / r.target_good);
   return (
-    <div style={{ marginTop: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
         <span>{r.device_id} · {r.session_id} · <Badge tone={r.state === 'recording' ? 'info' : r.state === 'done' ? 'success' : 'warning'}>{r.state}</Badge></span>
         <span className="hint">{r.elapsed_s}s / {r.timeout_s}s</span>
       </div>
       <div className="progress"><div style={{ width: `${frac * 100}%` }} /></div>
-      <div className="kpi-row">
+      <div className="kpi-row tight">
         <Kpi label="good frames" value={`${r.frames_good} / ${r.target_good}`} />
         <Kpi label="all frames" value={r.frames_total} />
         <Kpi label="code" value={r.dominant_code ?? '—'} />

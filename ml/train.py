@@ -170,7 +170,8 @@ def train_pipeline(data_dir: Path, out_dir: Path, enrolled: Sequence[str],
                    device_codes: Optional[Dict[str, str]] = None,
                    epochs: int = None, lr: float = None, batch_size: int = None,
                    target_frr: float = None,
-                   progress: Optional[ProgressCb] = None) -> Dict:
+                   progress: Optional[ProgressCb] = None,
+                   variants: Optional[Dict[str, str]] = None) -> Dict:
     from ml.evaluate import evaluate  # local import to avoid a cycle
 
     epochs = epochs or config.EPOCHS
@@ -184,6 +185,13 @@ def train_pipeline(data_dir: Path, out_dir: Path, enrolled: Sequence[str],
     if progress:
         progress({"stage": "loading", "epoch": 0, "total_epochs": epochs})
     fs = load_recordings(Path(data_dir))
+    # Same physical remote, other button (e.g. FOB_A's OFF): genuine data of the
+    # owner. The owner's profile must cover every button the user presses (the
+    # pattern lock uses both), and hand position per button changes the signal.
+    variants = {v: o for v, o in (variants or {}).items() if o in set(enrolled)}
+    merged = sorted({d for d in fs.device_ids if d in variants})
+    if merged:
+        fs.device_ids = [variants.get(d, d) for d in fs.device_ids]
     present = set(fs.device_ids)
     classes = [d for d in enrolled if d in present]
     if len(classes) < 2:
@@ -222,6 +230,8 @@ def train_pipeline(data_dir: Path, out_dir: Path, enrolled: Sequence[str],
     if progress:
         progress({"stage": "evaluating", "epoch": epochs, "total_epochs": epochs})
     report = evaluate(fs, splits, classes, scaler, models, auths, device_codes or {}, live=live)
+    if merged:
+        report["merged_variants"] = merged
     report["meta"] = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "train_seconds": round(time.time() - t0, 1),

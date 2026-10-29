@@ -1,0 +1,28 @@
+{
+ "FOB_A": {
+  "presses": 31,
+  "claim": "code",
+  "accepted": 31,
+  "matched_profile": {
+   "FOB_A": 31
+  },
+  "median_score": 0.632,
+  "accepted_by_distance": {
+   "0.75": "10/10",
+   "1.0": "11/11",
+   "1.25": "10/10"
+  }
+ },
+ "FOB_A_OFF": {
+  "presses": 10,
+  "claim": "fingerprint",
+  "accepted": 10,
+  "matched_profile": {
+   "FOB_A": 10
+  },
+  "median_score": 0.655,
+  "accepted_by_distance": {
+   "1.0": "10/10"
+  }
+ }
+}

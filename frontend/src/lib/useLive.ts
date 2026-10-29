@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { API_BASE, Decision, FrameEvent, HubStatus, RecordingStatus, TrainingState, WS_URL, api } from './api';
+import { API_BASE, Decision, FrameEvent, HubStatus, LockReport, RecordingStatus, TrainingState, WS_URL, api } from './api';
 
 export interface LiveState {
   connected: boolean;
@@ -11,6 +11,10 @@ export interface LiveState {
   rxStats: Record<string, number> | null;
   recording: RecordingStatus | null;
   training: TrainingState | null;
+  lock: LockReport | null;
+  lockEvents: LockReport[];
+  /** Number of successful (re)connections: changes whenever the backend comes back. */
+  epoch: number;
 }
 
 const MAX_FRAMES = 200;
@@ -20,6 +24,7 @@ const MAX_DECISIONS = 100;
 export function useLive(): LiveState {
   const [state, setState] = useState<LiveState>({
     connected: false, status: null, frames: [], decisions: [], rxStats: null, recording: null, training: null,
+    lock: null, lockEvents: [], epoch: 0,
   });
   const pending = useRef<FrameEvent[]>([]);
 
@@ -43,7 +48,7 @@ export function useLive(): LiveState {
 
     const connect = () => {
       ws = new WebSocket(WS_URL);
-      ws.onopen = () => setState((s) => ({ ...s, connected: true }));
+      ws.onopen = () => setState((s) => ({ ...s, connected: true, epoch: s.epoch + 1 }));
       ws.onclose = () => {
         setState((s) => ({ ...s, connected: false }));
         if (!closed) timer = setTimeout(connect, 2000);
@@ -72,6 +77,11 @@ export function useLive(): LiveState {
           case 'recording':
             setState((s) => ({ ...s, recording: msg as unknown as RecordingStatus }));
             break;
+          case 'lock': {
+            const l = msg as unknown as LockReport;
+            setState((s) => ({ ...s, lock: l, lockEvents: l.event && l.event !== 'none' ? [l, ...s.lockEvents].slice(0, 100) : s.lockEvents }));
+            break;
+          }
           case 'training':
             setState((s) => ({ ...s, training: msg as unknown as TrainingState }));
             break;

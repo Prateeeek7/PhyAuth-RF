@@ -26,7 +26,7 @@ def main():
     warnings.filterwarnings("ignore", category=RuntimeWarning)
 
     from ml.train import train_pipeline
-    from tools._registry import load_registry
+    from tools._registry import load_registry, load_variants
 
     codes, authorized = load_registry()
     enrolled = args.enrolled or authorized
@@ -40,7 +40,8 @@ def main():
         else:
             print(f"\n{stage}", flush=True)
 
-    report = train_pipeline(Path(args.data), Path(args.out), enrolled, codes, epochs=args.epochs, progress=progress)
+    report = train_pipeline(Path(args.data), Path(args.out), enrolled, codes, epochs=args.epochs, progress=progress,
+                            variants=load_variants())
     print()
     if report["meta"].get("simulated_data"):
         print("NOTE: the dataset contains SIMULATED recordings.")

@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import config
 from backend.database import init_db
 from backend.hub import hub
-from backend.routers import attack, devices, events, hardware, models, recordings, ws
+from backend.routers import attack, devices, events, hardware, lock, models, recordings, ws
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
@@ -37,7 +37,7 @@ app = FastAPI(
 app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_credentials=False,
                    allow_methods=["*"], allow_headers=["*"])
 
-for r in (devices, hardware, recordings, models, events, attack, ws):
+for r in (devices, hardware, recordings, models, events, attack, lock, ws):
     app.include_router(r.router)
 
 

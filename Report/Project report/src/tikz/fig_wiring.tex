@@ -1,0 +1,59 @@
+\documentclass[border=6pt]{standalone}
+\input{common.tex}
+\usepackage[european, straightvoltages]{circuitikz}
+\begin{document}
+\begin{circuitikz}[every node/.style={font=\footnotesize}, line width=0.7pt]
+\ctikzset{bipoles/thickness=1.2}
+\tikzset{
+ chip/.style={draw=navy, fill=lblu, line width=1pt, rounded corners=2pt},
+ mod/.style={draw=#1, fill=#1!8, line width=1pt, rounded corners=2pt},
+ pin/.style={font=\scriptsize\ttfamily, inner sep=1.5pt},
+ w3/.style={draw=red!80!black, line width=1.1pt},
+ wg/.style={draw=black, line width=1.1pt},
+ wd/.style={draw=blu, line width=1.1pt},
+}
+% ===================== (a) receiver
+\node[font=\small\bfseries, text=navy] at (4.4,7.4) {(a) Receiver / verifier node};
+% SRX882
+\draw[mod=grn] (0,2.2) rectangle (2.1,5.9);
+\node[font=\small\bfseries, text=grn, align=center] at (1.05,3.0) {SRX882\\[-1pt]\scriptsize 433.92\,MHz RX};
+\foreach \y/\n in {5.4/VCC,4.9/CS,4.3/GND,3.7/DATA} \node[pin, anchor=east] at (2.1,\y) {\n};
+\draw (0.6,5.9) -- (0.6,6.2) node[antenna, anchor=south, scale=0.55]{};
+\node[pin, anchor=west, font=\scriptsize\itshape] at (0.85,6.45) {ANT};
+% ESP32
+\draw[chip] (3.6,1.4) rectangle (5.9,6.0);
+\node[font=\small\bfseries, text=navy, align=center] at (4.75,2.25) {ESP32\\[-1pt]\scriptsize DevKit (D0WD-V3)};
+\foreach \y/\n in {5.4/3V3,4.3/GND,3.7/GPIO14} \node[pin, anchor=west] at (3.6,\y) {\n};
+\foreach \y/\n in {5.4/GPIO25,3.9/GPIO27,2.7/GND} \node[pin, anchor=east] at (5.9,\y) {\n};
+\draw[wg] (4.75,1.4) -- (4.75,1.0) node[below, font=\scriptsize] {USB-C $\rightarrow$ host PC};
+% wires SRX -> ESP
+\draw[w3] (2.1,5.4) -- (3.6,5.4);
+\draw[w3] (2.1,4.9) -- (2.85,4.9) -- (2.85,5.4) node[circ]{};
+\draw[wg] (2.1,4.3) -- (3.6,4.3);
+\draw[wd] (2.1,3.7) -- node[above, font=\scriptsize\itshape, text=blu] {data} (3.6,3.7);
+% LED branch
+\draw (5.9,5.4) to[R, l=$470\,\Omega$] (8.5,5.4) to[leDo, l_={green LED}, color=grn] (8.5,3.9) -- (8.5,3.6) node[ground]{};
+% buzzer branch
+\draw (5.9,3.9) -- (6.9,3.9) to[generic] (6.9,2.3) node[ground]{}; \node[font=\footnotesize, anchor=west, align=left] at (7.2,3.1) {piezo\\buzzer};
+\draw[wg] (5.9,2.7) -- (6.3,2.7) -- (6.3,2.3) node[ground]{};
+% ===================== (b) transmitter
+\begin{scope}[xshift=10.9cm]
+\node[font=\small\bfseries, text=navy] at (3.0,7.4) {(b) Transmitter / emulator node};
+\draw[chip] (0,1.4) rectangle (2.3,6.0);
+\node[font=\small\bfseries, text=navy, align=center] at (1.15,2.25) {ESP32-S3\\[-1pt]\scriptsize DevKitC (N16R8)};
+\foreach \y/\n in {5.4/GPIO4,4.8/3V3,4.2/GND} \node[pin, anchor=east] at (2.3,\y) {\n};
+\node[pin, anchor=west] at (0,3.3) {GPIO0};
+\draw[wg] (1.15,1.4) -- (1.15,1.0) node[below, font=\scriptsize] {USB-C `COM' $\rightarrow$ host PC};
+\draw (0,3.3) -- (-0.3,3.3) to[push button, l_={BOOT}] (-0.3,1.9) node[ground]{};
+% STX882
+\draw[mod=org] (4.0,3.2) rectangle (6.1,5.9);
+\node[font=\small\bfseries, text=org, align=center] at (5.05,3.75) {STX882\\[-1pt]\scriptsize 433.92\,MHz TX};
+\foreach \y/\n in {5.4/DATA,4.8/VCC} \node[pin, anchor=west] at (4.0,\y) {\n};
+\node[pin, anchor=west] at (4.0,4.2) {GND};
+\draw (5.6,5.9) -- (5.6,6.2) node[antenna, anchor=south, scale=0.55]{}; \node[pin, anchor=west, font=\scriptsize\itshape] at (5.85,6.45) {ANT};
+\draw[wd] (2.3,5.4) -- node[above, font=\scriptsize\itshape, text=blu] {RMT out} (4.0,5.4);
+\draw[w3] (2.3,4.8) -- (4.0,4.8);
+\draw[wg] (2.3,4.2) -- (4.0,4.2);
+\end{scope}
+\end{circuitikz}
+\end{document}

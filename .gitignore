@@ -29,3 +29,13 @@ Report/latex/*_preview.png
 .DS_Store
 _backup_pre_v2.tar.gz
 .claude/
+
+# local logs and generated previews
+logs/
+Report/**/*.aux
+Report/**/*.log
+Report/**/*.out
+Report/**/*_preview.png
+Report/**/_work/
+Report/Seminar deck figures/preview/
+Report/**/__pycache__/

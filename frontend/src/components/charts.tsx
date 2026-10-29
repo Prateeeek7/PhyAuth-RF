@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { FrameEvent } from '../lib/api';
 
 // ---------------------------------------------------------------------------
@@ -12,6 +12,29 @@ const LABEL = '#8B949E';
 export const OK = '#00E676';
 export const BAD = '#FF5252';
 export const WARN = '#FFC107';
+
+/** Width of the element in CSS px, so SVG charts draw at the size they are shown.
+ *  Measured when the element mounts, then kept current by a ResizeObserver. */
+function useWidth(fallback: number): [(el: HTMLElement | null) => void, number] {
+  const [w, setW] = useState(fallback);
+  const ro = useRef<ResizeObserver | null>(null);
+  const ref = useCallback((el: HTMLElement | null) => {
+    ro.current?.disconnect();
+    ro.current = null;
+    if (!el) return;
+    const now = Math.round(el.getBoundingClientRect().width);
+    if (now > 0) setW(Math.max(240, now));
+    if (typeof ResizeObserver !== 'undefined') {
+      ro.current = new ResizeObserver(([e]) => {
+        const v = Math.round(e.contentRect.width);
+        if (v > 0) setW(Math.max(240, v));
+      });
+      ro.current.observe(el);
+    }
+  }, []);
+  useEffect(() => () => ro.current?.disconnect(), []);
+  return [ref, w];
+}
 
 const colorCache = new Map<string, string>();
 export function deviceColor(name: string | null | undefined): string {
@@ -106,78 +129,6 @@ export function ResidualBars({ frame, height = 140 }: { frame: FrameEvent | null
 // ---------------------------------------------------------------------------
 // Pulse-width histogram (recent frames)
 // ---------------------------------------------------------------------------
-export function WidthHistogram({ frames, height = 180 }: { frames: FrameEvent[]; height?: number }) {
-  const widths: number[] = [];
-  const Ts: number[] = [];
-  frames.forEach((f) => {
-    f.pulses_us.forEach((w) => widths.push(w));
-    if (f.ok && f.clock_t_us) Ts.push(f.clock_t_us);
-  });
-  if (!widths.length) return <Empty h={height} text="No pulses yet" />;
-  const maxUs = Math.min(2500, Math.max(...widths));
-  const bins = 100;
-  const bw = maxUs / bins;
-  const counts = new Array(bins).fill(0);
-  widths.forEach((w) => {
-    if (w <= maxUs) counts[Math.min(bins - 1, Math.floor(w / bw))]++;
-  });
-  const cmax = Math.max(...counts);
-  const W = 900, H = height, pad = 24;
-  const T = Ts.length ? Ts.slice().sort((a, b) => a - b)[Math.floor(Ts.length / 2)] : null;
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" role="img" aria-label="Pulse width histogram">
-      {counts.map((c, i) => {
-        const h = (Math.sqrt(c) / Math.sqrt(cmax)) * (H - pad - 10);
-        return <rect key={i} x={(i / bins) * W} width={W / bins - 1} y={H - pad - h} height={h} fill="#00BCD4" opacity={0.85} />;
-      })}
-      {T && [1, 2, 3, 4].map((k) => k * T <= maxUs && (
-        <g key={k}>
-          <line x1={(k * T / maxUs) * W} x2={(k * T / maxUs) * W} y1={4} y2={H - pad} stroke={WARN} strokeDasharray="4 4" />
-          <text x={(k * T / maxUs) * W + 3} y={14} fill={WARN} fontSize={11} fontFamily="var(--font-mono)">{k}T</text>
-        </g>
-      ))}
-      {[0, 0.25, 0.5, 0.75, 1].map((f) => (
-        <text key={f} x={f * W} y={H - 6} fill={LABEL} fontSize={10} textAnchor={f === 1 ? 'end' : f === 0 ? 'start' : 'middle'} fontFamily="var(--font-mono)">{Math.round(f * maxUs)} µs</text>
-      ))}
-    </svg>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Clock period trend per decoded code
-// ---------------------------------------------------------------------------
-export function ClockTrend({ frames, labelOf, height = 200 }: { frames: FrameEvent[]; labelOf: (code: string) => string; height?: number }) {
-  const pts = frames.filter((f) => f.ok && f.clock_t_us);
-  if (pts.length < 2) return <Empty h={height} text="Need decoded frames" />;
-  const W = 900, H = height, padL = 56, padB = 22;
-  const ys = pts.map((p) => p.clock_t_us!);
-  let lo = Math.min(...ys), hi = Math.max(...ys);
-  const span = Math.max(hi - lo, 0.5);
-  lo -= span * 0.1; hi += span * 0.1;
-  const x = (i: number) => padL + (i / (pts.length - 1)) * (W - padL - 8);
-  const y = (v: number) => 8 + (1 - (v - lo) / (hi - lo)) * (H - padB - 8);
-  const codes = Array.from(new Set(pts.map((p) => p.code)));
-  return (
-    <div>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" role="img" aria-label="Estimated clock period per frame">
-        {[0, 0.5, 1].map((f) => (
-          <g key={f}>
-            <line x1={padL} x2={W} y1={y(lo + f * (hi - lo))} y2={y(lo + f * (hi - lo))} stroke="#222831" />
-            <text x={padL - 4} y={y(lo + f * (hi - lo)) + 3} fill={LABEL} fontSize={10} textAnchor="end" fontFamily="var(--font-mono)">{(lo + f * (hi - lo)).toFixed(1)}</text>
-          </g>
-        ))}
-        {pts.map((p, i) => (
-          <circle key={i} cx={x(i)} cy={y(p.clock_t_us!)} r={3} fill={deviceColor(labelOf(p.code))}>
-            <title>{`${labelOf(p.code)}  T=${p.clock_t_us!.toFixed(3)} µs`}</title>
-          </circle>
-        ))}
-        <text x={4} y={14} fill={LABEL} fontSize={10} fontFamily="var(--font-mono)">T (µs)</text>
-      </svg>
-      <Legend items={codes.map((c) => labelOf(c))} />
-    </div>
-  );
-}
-
 export function Legend({ items }: { items: string[] }) {
   const uniq = Array.from(new Set(items));
   return (
@@ -215,12 +166,13 @@ export function ScoreMeter({ score }: { score: number | null | undefined }) {
 // ROC (FAR vs TAR), log-x
 // ---------------------------------------------------------------------------
 export function RocChart({ series, height = 260 }: { series: { name: string; roc: [number, number][]; color: string }[]; height?: number }) {
-  const W = 420, H = height, padL = 40, padB = 30;
+  const [ref, W] = useWidth(420);
+  const H = height, padL = 44, padB = 30;
   const minFar = 1e-4;
   const x = (far: number) => padL + ((Math.log10(Math.max(far, minFar)) - Math.log10(minFar)) / -Math.log10(minFar)) * (W - padL - 8);
   const y = (tar: number) => 8 + (1 - tar) * (H - padB - 8);
   return (
-    <div>
+    <div ref={ref}>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label="ROC curves">
         {[1e-4, 1e-3, 1e-2, 1e-1, 1].map((f) => (
           <g key={f}>
@@ -259,7 +211,7 @@ export function ConfusionMatrix({ labels, matrix }: { labels: string[]; matrix: 
   if (!labels.length) return <Empty h={80} text="No test data" />;
   const rowSums = matrix.map((r) => r.reduce((a, b) => a + b, 0) || 1);
   return (
-    <table className="eng-table" style={{ width: 'auto' }}>
+    <table className="eng-table">
       <thead>
         <tr>
           <th>true ↓ / pred →</th>
@@ -289,14 +241,15 @@ export function ConfusionMatrix({ labels, matrix }: { labels: string[]; matrix: 
 // 2-D embedding map (PCA)
 // ---------------------------------------------------------------------------
 export function EmbeddingMap({ points, height = 320 }: { points: { x: number; y: number; device: string; enrolled: boolean }[]; height?: number }) {
+  const [ref, mapW] = useWidth(520);
   if (!points.length) return <Empty h={height} text="No embeddings" />;
   const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
   const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-  const W = 520, H = height, pad = 12;
+  const W = mapW, H = height, pad = 12;
   const sx = (v: number) => pad + ((v - x0) / (x1 - x0 || 1)) * (W - 2 * pad);
   const sy = (v: number) => pad + (1 - (v - y0) / (y1 - y0 || 1)) * (H - 2 * pad);
   return (
-    <div>
+    <div ref={ref}>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label="Embedding space, first two principal components">
         <rect x={0} y={0} width={W} height={H} fill="#0a0e14" />
         {points.map((p, i) => p.enrolled
@@ -316,9 +269,9 @@ export function HBarList({ items, format = (v: number) => v.toFixed(3) }: { item
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {items.map((it) => (
-        <div key={it.label} style={{ display: 'grid', gridTemplateColumns: '150px 1fr 60px', alignItems: 'center', gap: 8, fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+        <div key={it.label} style={{ display: 'grid', gridTemplateColumns: '170px 1fr 64px', alignItems: 'center', gap: 10, fontSize: 12.5, fontFamily: 'var(--font-mono)', padding: '3px 0' }}>
           <span style={{ color: LABEL, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
-          <div style={{ background: '#161B22', height: 10 }}>
+          <div style={{ background: '#0b0f15', height: 12, borderRadius: 6, overflow: 'hidden' }}>
             <div style={{ width: `${(Math.max(0, it.value) / max) * 100}%`, height: '100%', background: '#00BCD4' }} />
           </div>
           <span style={{ textAlign: 'right' }}>{format(it.value)}</span>

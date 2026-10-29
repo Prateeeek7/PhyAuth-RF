@@ -1,10 +1,14 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { api, HubStatus, PortInfo } from '../../lib/api';
-import { Badge, Field, Kpi, Notify, Panel } from '../ui';
+import { api, PortInfo } from '../../lib/api';
+import { useApp } from '../shell/AppContext';
+import { Badge, Field, Kpi, PageHead, Panel } from '../ui';
 
-export function HardwareView({ status, rxStats, notify }: { status: HubStatus | null; rxStats: Record<string, number> | null; notify: Notify }) {
+export function HardwareView() {
+  const { live, notify } = useApp();
+  const status = live.status;
+  const rxStats = live.rxStats;
   const [ports, setPorts] = useState<PortInfo[]>([]);
   const [port, setPort] = useState('');
   const [baud, setBaud] = useState(921600);
@@ -16,7 +20,8 @@ export function HardwareView({ status, rxStats, notify }: { status: HubStatus | 
   const refresh = () => api.get<PortInfo[]>('/api/hardware/ports').then((p) => {
     setPorts(p);
     const likely = p.find((x) => x.likely_esp32);
-    if (likely && !port) setPort(likely.device);
+    const current = p.find((x) => x.device === status?.receiver.port);
+    if (!port) setPort((current ?? likely)?.device ?? '');
   }).catch(() => undefined);
   useEffect(() => { refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -30,12 +35,14 @@ export function HardwareView({ status, rxStats, notify }: { status: HubStatus | 
   };
 
   return (
-    <div className="grid-2">
+    <>
+      <PageHead title="Hardware" sub="Connect the receiver, check the radio front-end and tune the firmware. Wiring: docs/HARDWARE.md." />
+      <div className="cols-2 stretch">
       <Panel title="Receiver connection">
-        <div className="kpi-row">
+        <div className="kpi-row two" style={{ marginTop: 0 }}>
           <Kpi label="mode" value={rx?.mode ?? '—'} tone={rx?.mode === 'hardware' ? 'ok' : rx?.mode === 'simulation' ? 'warn' : 'bad'} />
-          <Kpi label="port" value={rx?.port ?? '—'} />
-          <Kpi label="firmware" value={hello ? `${hello.fw} ${hello.ver}` : '—'} />
+          <Kpi label="port" value={rx?.port ? rx.port.replace('/dev/cu.', '') : '—'} hint={rx?.port ?? undefined} />
+          <Kpi label="firmware" value={hello ? `v${hello.ver}` : '—'} hint={hello ? `${hello.fw} ${hello.ver} · ${hello.board ?? ''}` : undefined} />
           <Kpi label="last frame" value={rx?.last_frame_age_s != null ? `${rx.last_frame_age_s}s ago` : '—'} />
         </div>
         {rx?.last_error && <p style={{ color: 'var(--warning)', fontSize: 12 }}>last error: {rx.last_error}</p>}
@@ -78,31 +85,7 @@ export function HardwareView({ status, rxStats, notify }: { status: HubStatus | 
         {hello && <div className="hint" style={{ marginTop: 6 }}>firmware: gap {hello.gap_us} µs · glitch {hello.glitch_us} µs · min pulses {hello.min_pulses} · clock {Number(hello.clk_hz) / 1e6} MHz {hello.sim ? <Badge tone="warning">SIMULATED</Badge> : null}</div>}
       </Panel>
 
-      <Panel title="Wiring" style={{ gridColumn: '1 / -1' }}>
-        <div className="grid-2" style={{ padding: 0 }}>
-          <pre className="code-block">{`RECEIVER  ESP32 (either board)  ←→  SRX882
-  3V3  ──────────────────────────  VCC   (3.3 V only: DATA must stay 3.3 V logic)
-  GND  ──────────────────────────  GND
-  GPIO14 ────────────────────────  DATA
-  3V3  ──────────────────────────  CS    (CS low = receiver asleep)
-  ANT: spring coil or 17.3 cm wire (¼ λ @ 433.92 MHz)
-
-  verdict on the on-board LED, no extra parts:
-    ESP32    blue LED GPIO2: solid = authentic, blink = rejected
-    ESP32-S3 RGB LED:  green = authentic, blinking red = rejected
-  flash: pio run -e esp32dev|esp32s3 -t upload`}</pre>
-          <pre className="code-block">{`TRANSMITTER / ATTACKER  ESP32 (the other board)  ←→  STX882
-  5V (VIN) ──────────────────────  VCC
-  GND  ──────────────────────────  GND
-  GPIO4 ─────────────────────────  DATA
-  ANT: spring coil or 17.3 cm wire
-  BOOT button = one press · on-board LED lights while sending
-
-Keep TX and RX ≥ 50 cm apart (the SRX882 saturates
-when closer); vary 1 m … 5 m during data collection.
-ESP32-S3: either USB-C port works (UART and native USB).`}</pre>
-        </div>
-      </Panel>
-    </div>
+      </div>
+    </>
   );
 }

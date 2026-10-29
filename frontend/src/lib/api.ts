@@ -219,6 +219,7 @@ export interface Report {
   feature_importance: { feature: string; eer: number | null; delta_eer: number | null }[];
   embedding_map: { points: { x: number; y: number; device: string; enrolled: boolean }[]; explained: number | null };
   liveness?: LivenessReport;
+  variants?: { device: string; owner: string; presses: number; accepted: number; acceptance_rate: number | null; median_score: number | null }[];
   meta: ReportMeta;
 }
 
@@ -234,4 +235,19 @@ export interface PortInfo {
   description: string;
   hwid: string;
   likely_esp32: boolean;
+}
+
+export interface LockReport {
+  type: 'lock';
+  event: string;
+  state: 'DISABLED' | 'LOCKED' | 'UNLOCKED' | 'LOCKOUT' | 'LEARN';
+  n: number;
+  len: number;
+  fails: number;
+  owner: string;
+  key: number;
+  relock_s?: number;
+  gap_s?: number;
+  led?: number;
+  time?: number;
 }

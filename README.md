@@ -130,6 +130,14 @@ device gave 30 presses and 210 clean frames.
   check correctly stays off.
 * Usable link window: about 0.75–1.25 m. Closer saturates the SRX882; at 1.5 m and beyond,
   the short pulses are lost.
+* **Cross-day (2026-10-21, session s02, `tools/crossday.py`):** edge model trained on s01
+  only. **31/31** ON presses of the remote accepted on the new day (all three distances, median
+  score 0.63). **10/10 OFF presses**, a code never enrolled, were matched to FOB_A by fingerprint
+  alone (median score 0.66): the system recognises the hardware, not the code.
+* **Robustness (`tools/analysis.py`, s01):** with one distance left out of training, every clone and
+  unknown press is rejected and 1 of 90 genuine presses is falsely rejected. Deciding on 1 frame
+  gives 46 % genuine false rejects, 4 frames gives 1 %. The clone is rejected at every frame count.
+* Still open: ESP32 node devices recorded on a second day.
 * Still needed before claiming generalisation: a second session (s02) on another day,
   which enables the cross-session split.
 

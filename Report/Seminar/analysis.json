@@ -1,0 +1,113 @@
+{
+ "leave_one_distance_out": [
+  {
+   "held_out_m": 0.75,
+   "genuine": {
+    "EMU_1": {
+     "presses": 10,
+     "frr": 0.0
+    },
+    "EMU_2": {
+     "presses": 10,
+     "frr": 0.0
+    },
+    "FOB_A": {
+     "presses": 10,
+     "frr": 0.0
+    }
+   },
+   "clone": {
+    "presses": 10,
+    "rejection": 1.0
+   },
+   "unknown": {
+    "presses": 10,
+    "rejection": 1.0
+   }
+  },
+  {
+   "held_out_m": 1.0,
+   "genuine": {
+    "EMU_1": {
+     "presses": 10,
+     "frr": 0.0
+    },
+    "EMU_2": {
+     "presses": 10,
+     "frr": 0.0
+    },
+    "FOB_A": {
+     "presses": 10,
+     "frr": 0.0
+    }
+   },
+   "clone": {
+    "presses": 10,
+    "rejection": 1.0
+   },
+   "unknown": {
+    "presses": 10,
+    "rejection": 1.0
+   }
+  },
+  {
+   "held_out_m": 1.25,
+   "genuine": {
+    "EMU_1": {
+     "presses": 10,
+     "frr": 0.0
+    },
+    "EMU_2": {
+     "presses": 10,
+     "frr": 0.0
+    },
+    "FOB_A": {
+     "presses": 10,
+     "frr": 0.09999999999999998
+    }
+   },
+   "clone": {
+    "presses": 10,
+    "rejection": 1.0
+   },
+   "unknown": {
+    "presses": 10,
+    "rejection": 1.0
+   }
+  }
+ ],
+ "frames_per_decision": [
+  {
+   "frames": 1,
+   "genuine_frr": 0.45555555555555555,
+   "clone_rejection": 1.0,
+   "unknown_rejection": 1.0,
+   "genuine_presses": 90,
+   "latency_ms": 42.9
+  },
+  {
+   "frames": 2,
+   "genuine_frr": 0.2111111111111111,
+   "clone_rejection": 1.0,
+   "unknown_rejection": 1.0,
+   "genuine_presses": 90,
+   "latency_ms": 85.8
+  },
+  {
+   "frames": 3,
+   "genuine_frr": 0.05555555555555555,
+   "clone_rejection": 1.0,
+   "unknown_rejection": 1.0,
+   "genuine_presses": 90,
+   "latency_ms": 128.7
+  },
+  {
+   "frames": 4,
+   "genuine_frr": 0.011111111111111112,
+   "clone_rejection": 1.0,
+   "unknown_rejection": 1.0,
+   "genuine_presses": 90,
+   "latency_ms": 171.6
+  }
+ ]
+}

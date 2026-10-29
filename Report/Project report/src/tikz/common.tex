@@ -1,0 +1,27 @@
+\usepackage{newtxtext,newtxmath}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,shapes.misc,calc,fit,backgrounds,automata}
+\definecolor{navy}{HTML}{0F294A}
+\definecolor{blu}{HTML}{1E56A0}
+\definecolor{lblu}{HTML}{EAF1FB}
+\definecolor{grn}{HTML}{1E8449}
+\definecolor{lgrn}{HTML}{E9F7EF}
+\definecolor{org}{HTML}{CA6F1E}
+\definecolor{lorg}{HTML}{FDF2E9}
+\definecolor{red}{HTML}{B03A2E}
+\definecolor{lred}{HTML}{FDEDEC}
+\definecolor{pur}{HTML}{7D3C98}
+\definecolor{lpur}{HTML}{F4ECF7}
+\definecolor{gry}{HTML}{5D6D7E}
+\definecolor{lgry}{HTML}{F4F6F7}
+\tikzset{
+  >={Stealth[length=2.6mm,width=1.9mm]},
+  every node/.style={font=\small},
+  blk/.style={draw=blu, fill=lblu, rounded corners=2pt, line width=0.7pt, align=center,
+              minimum height=10mm, text width=#1, inner sep=3pt},
+  blk/.default=30mm,
+  flow/.style={->, line width=0.8pt, draw=navy},
+  lbl/.style={font=\footnotesize\itshape, text=navy},
+  frame/.style={draw=#1, dashed, rounded corners=4pt, line width=0.9pt, inner sep=7pt},
+  ttl/.style={font=\small\bfseries, text=#1},
+}

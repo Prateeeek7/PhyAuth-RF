@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { API_BASE, api, Decision, HubStatus } from '../../lib/api';
-import { Badge, Kpi, Notify, Panel, VERDICT_TEXT, num, timeOf, verdictTone } from '../ui';
+import { API_BASE, api } from '../../lib/api';
+import { useApp } from '../shell/AppContext';
+import { Kpi, Panel } from '../ui';
 
 interface ExportInfo {
   version: string;
@@ -15,10 +16,12 @@ interface ExportInfo {
   board_env?: string;
 }
 
-export function EdgeView({ status, decisions, notify }: { status: HubStatus | null; decisions: Decision[]; notify: Notify }) {
+/** Export + flash + mode controls, shown at the bottom of Model lab. */
+export function EdgeView() {
+  const { live, notify } = useApp();
+  const status = live.status;
   const [exp, setExp] = useState<ExportInfo | null>(null);
   const hello = status?.receiver.hello as Record<string, string | number> | null;
-  const edgeDecisions = decisions.filter((d) => d.source === 'edge');
 
   const doExport = async () => {
     try {
@@ -38,8 +41,10 @@ export function EdgeView({ status, decisions, notify }: { status: HubStatus | nu
   };
 
   return (
-    <div className="grid-2">
-      <Panel title="1 · Export the trained model to firmware">
+    <>
+      <div className="section-label" style={{ marginTop: 8 }}>Deploy to the ESP32: run the model on the chip itself, verdict on the LED</div>
+      <div className="cols-2 stretch">
+      <Panel title="1 · Export the model to firmware" sub="Weights, scaler and device profiles as C arrays">
         <p className="hint">
           The EdgeMLP (11 → 32 → 16), the feature scaler and each enrolled device&apos;s Mahalanobis profile and code are written as C arrays to
           <code> firmware/esp32_receiver/src/phyauth_model.h</code>. No TensorFlow toolchain is needed. Feature extraction is the same C code that
@@ -64,7 +69,7 @@ export function EdgeView({ status, decisions, notify }: { status: HubStatus | nu
         )}
       </Panel>
 
-      <Panel title="2 · Flash and switch mode">
+      <Panel title="2 · Flash and choose the mode" sub="Stream frames, decide on-chip, or both">
         <pre className="code-block">{`cd firmware/esp32_receiver
 ${exp?.flash_command?.replace('cd firmware/esp32_receiver && ', '') ?? 'pio run -e esp32dev -t upload   # ESP32-S3 receiver: -e esp32s3'}
 # or Arduino IDE: open esp32_receiver.ino`}</pre>
@@ -86,24 +91,7 @@ ${exp?.flash_command?.replace('cd firmware/esp32_receiver && ', '') ?? 'pio run 
         </p>
       </Panel>
 
-      <Panel title="On-chip decisions (from the ESP32)" style={{ gridColumn: '1 / -1' }}>
-        <div className="table-scroll">
-          <table className="eng-table">
-            <thead><tr><th>time</th><th>verdict</th><th>device</th><th>code</th><th>score</th><th>liveness</th><th>frames</th><th>T (µs)</th><th>inference</th></tr></thead>
-            <tbody>
-              {edgeDecisions.map((d, i) => (
-                <tr key={i}>
-                  <td>{timeOf(d.time)}</td>
-                  <td><Badge tone={verdictTone(d.verdict)}>{VERDICT_TEXT[d.verdict] ?? d.verdict}</Badge></td>
-                  <td>{d.claimed}</td><td><code>{d.code}</code></td><td>{num(d.score)}</td><td>{d.liveness ?? 'n/a'}</td><td>{d.frames}</td>
-                  <td>{num(d.clock_t_us, 3)}</td><td>{d.infer_us ? `${d.infer_us} µs` : '—'}</td>
-                </tr>
-              ))}
-              {!edgeDecisions.length && <tr><td colSpan={9} className="hint">No on-chip decisions yet. Export, flash, then use MODE BOTH. (Not available in the simulator.)</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
-    </div>
+      </div>
+    </>
   );
 }

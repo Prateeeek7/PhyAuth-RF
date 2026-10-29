@@ -46,9 +46,13 @@ def available_ports() -> List[Dict]:
 Subscriber = Callable[[Dict], None]
 
 
+SILENCE_REOPEN_S = 8.0   # firmware stats arrive every 2 s
+
+
 class ReceiverLink:
     def __init__(self):
         self.mode: str = "disconnected"         # disconnected | hardware | simulation
+        self._last_line = time.time()
         self.port: Optional[str] = None
         self.baud: int = 921600
         self.hello: Optional[Dict] = None
@@ -167,10 +171,16 @@ class ReceiverLink:
                     self._ser = self._open()
                     logger.info("receiver connected on %s @ %d", self.port, self.baud)
                     backoff = 0.5
+                    self._last_line = time.time()
                     self.send("INFO")
                 raw = self._ser.readline()
                 if not raw:
+                    # The firmware prints a stats line every 2 s: long silence means the
+                    # port went stale (e.g. the board was reflashed or re-enumerated).
+                    if self.last_stats is not None and time.time() - self._last_line > SILENCE_REOPEN_S:
+                        raise IOError(f"receiver silent for {SILENCE_REOPEN_S:.0f} s, reopening port")
                     continue
+                self._last_line = time.time()
                 self.lines_rx += 1
                 msg = parse_line(raw.decode("utf-8", errors="ignore"))
                 if msg is None:

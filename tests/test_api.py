@@ -52,3 +52,13 @@ def test_recording_requires_registered_device(client):
 
 def test_report_absent_before_training(client):
     assert client.get("/api/models/report").status_code == 404
+
+
+def test_lock_api_requires_hardware_and_tracks_reports(client):
+    from acquisition.protocol import parse_line
+    assert client.get("/api/lock/status").status_code == 200
+    r = client.post("/api/lock/set", json={"owner": "FOB_A", "keys": ["ON", "ON", "OFF", "ON"]})
+    assert r.status_code in (409, 200)          # 409 unless a real receiver is attached
+    assert client.post("/api/lock/set", json={"owner": "FOB_A", "keys": ["ON", "BAD", "OFF", "ON"]}).status_code in (409, 422)
+    msg = parse_line('{"type":"lock","event":"unlock","state":"UNLOCKED","n":0,"len":7,"fails":0,"owner":"FOB_A","key":8}')
+    assert msg and msg["type"] == "lock"

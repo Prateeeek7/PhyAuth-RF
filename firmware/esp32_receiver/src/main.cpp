@@ -34,6 +34,16 @@
  *   {"type":"stats",...}  {"type":"auth",...}  {"type":"ack"|"err",...}
  * Commands (newline-terminated): PING, INFO, SET GAP <us>, SET GLITCH <us>,
  *   SET MINP <n>, MODE STREAM|EDGE|BOTH, LIVE ON|OFF, TEST
+ *   Pattern lock (needs an exported model): LOCK STATUS, LOCK LEARN <dev>,
+ *   LOCK SET <dev> <k,k,...> (keys: ON, OFF or EV1527 key nibble), LOCK CLEAR,
+ *   LOCK NOW (lock immediately), LOCK RELOCK <s> (auto-relock, 0 = off)
+ *
+ * Pattern lock (two factors: this physical remote + a secret ON/OFF sequence)
+ *   GPIO25 green LED : on = unlocked, short flash = press accepted,
+ *                      fast blink = failed attempt, slow blink = learn mode
+ *   GPIO27 buzzer    : failed attempt / foreign transmitter / lockout alarm
+ *                      (5 V buzzers need an NPN transistor driver)
+ *   GPIO26 red LED   : on while locked (optional)   GPIO33 relay: on while unlocked
  */
 #include <Arduino.h>
 #include <driver/gpio.h>
@@ -44,6 +54,8 @@ extern "C" {
 #include "phyauth_dsp.h"
 }
 #include "phyauth_model.h"
+#include "phyauth_lock.h"
+#include <Preferences.h>
 
 // ----------------------------------------------------------------------------
 // Configuration
@@ -243,6 +255,161 @@ static void actuate(bool ok) {
   actuator_off_ms = millis() + 1500;
 }
 
+
+#if PHYAUTH_MODEL_PRESENT
+// ----------------------------------------------------------------------------
+// Pattern lock: state machine in phyauth_lock.c, outputs here (non-blocking)
+// ----------------------------------------------------------------------------
+static pa_lock_t lock;
+static Preferences prefs;
+static uint32_t flash_until = 0;   // short green flash for an accepted press
+static uint32_t alarm_until = 0;   // fast blink + buzzer
+static uint8_t alarm_kind = 0;     // 1 wrong pattern, 2 foreign transmitter, 3 lockout
+
+static int owner_index(const char *name) {
+  for (int i = 0; i < PA_NDEV; i++) if (!strcmp(PA_DEV_ID[i], name)) return i;
+  return -1;
+}
+
+static void lock_save() {
+  prefs.begin("palock", false);
+  prefs.putString("owner", lock.owner >= 0 ? PA_DEV_ID[lock.owner] : "");
+  prefs.putUChar("len", (uint8_t)lock.len);
+  if (lock.len > 0) prefs.putBytes("pat", lock.pattern, lock.len);
+  prefs.putUInt("relock", lock.relock_ms);
+  prefs.end();
+}
+
+static void lock_load() {
+  prefs.begin("palock", true);
+  String owner = prefs.getString("owner", "");
+  uint8_t len = prefs.getUChar("len", 0);
+  uint8_t pat[PA_LOCK_MAX] = {0};
+  if (len >= PA_LOCK_MIN && len <= PA_LOCK_MAX) prefs.getBytes("pat", pat, len);
+  lock.relock_ms = prefs.getUInt("relock", lock.relock_ms);
+  prefs.end();
+  int idx = owner_index(owner.c_str());   // model re-export may reorder devices
+  if (idx >= 0) pa_lock_set(&lock, idx, pat, len);
+}
+
+static void lock_report(pa_lock_event_t ev, int key) {
+  snprintf(out_buf, sizeof(out_buf),
+           "{\"type\":\"lock\",\"event\":\"%s\",\"state\":\"%s\",\"n\":%d,\"len\":%d,\"fails\":%d,"
+           "\"owner\":\"%s\",\"key\":%d,\"relock_s\":%u,\"gap_s\":%u,\"led\":%d}\n",
+           pa_lock_event_name(ev), pa_lock_state_name(lock.state), lock.n, lock.len, lock.fails,
+           lock.owner >= 0 ? PA_DEV_ID[lock.owner] : "", key, (unsigned)(lock.relock_ms / 1000),
+           (unsigned)(lock.gap_ms / 1000), (int)((REG_READ(GPIO_OUT_REG) >> LED_OK) & 1));
+  emit(out_buf);
+}
+
+static void lock_alarm(uint8_t kind, uint32_t now, uint32_t ms) {
+  alarm_kind = kind;
+  alarm_until = now + ms;
+}
+
+static void lock_feedback(pa_lock_event_t ev, uint32_t now) {
+  switch (ev) {
+    case PA_EV_PROGRESS:
+    case PA_EV_LEARN_STEP: flash_until = now + 120; break;
+    case PA_EV_LEARN_CONFIRM: flash_until = now + 700; break;
+    case PA_EV_LEARNED: lock_save(); flash_until = now + 1500; break;
+    case PA_EV_FAIL:
+    case PA_EV_LEARN_MISMATCH: lock_alarm(1, now, 1200); break;
+    case PA_EV_FOREIGN: flash_until = now + 120; break;   // counted like any press; alarm comes at the end
+    case PA_EV_LOCKOUT: lock_alarm(3, now, 3000); break;
+    default: break;
+  }
+}
+
+static void lock_outputs(uint32_t now) {
+  bool unlocked = lock.state == PA_LOCK_UNLOCKED;
+  bool green = unlocked, buzz = false;
+  if (lock.state == PA_LOCK_LEARN) green = (now / 500) & 1;            // slow blink: learning
+  if (flash_until) {
+    if ((int32_t)(now - flash_until) < 0) green = !unlocked;          // brief flash
+    else flash_until = 0;
+  }
+  if (alarm_until) {
+    if ((int32_t)(now - alarm_until) < 0) {
+      green = (now / 90) & 1;                                         // fast blink
+      uint32_t period = alarm_kind == 1 ? 300 : (alarm_kind == 2 ? 160 : 600);
+      buzz = (now % period) < period / 2;
+    } else {
+      alarm_until = 0;
+    }
+  }
+  digitalWrite(LED_OK, green ? HIGH : LOW);
+  digitalWrite(BUZZER_PIN, buzz ? HIGH : LOW);
+  digitalWrite(LED_BAD, (lock.state == PA_LOCK_LOCKED || lock.state == PA_LOCK_LOCKOUT) ? HIGH : LOW);
+  digitalWrite(RELAY_PIN, unlocked ? HIGH : LOW);
+}
+
+static bool lock_active() { return lock.state != PA_LOCK_DISABLED; }
+
+// One decided press -> lock. key = EV1527 key nibble (low 4 bits of the code).
+// A rejected press decided on fewer than PA_BURST_FRAMES frames (a quick tap)
+// is "unclear": it neither counts nor raises the alarm; the user presses again.
+// Only AUTHENTIC presses ever advance the pattern, so this cannot help a clone.
+static void lock_on_press(bool authentic, int dev, uint64_t code, int nbits, int frames) {
+  uint32_t now = millis();
+  int key = nbits == 24 ? (int)(code & 0xF) : -1;
+  (void)frames;   // every decided press counts toward the attempt
+  pa_lock_event_t ev = pa_lock_press(&lock, authentic ? 1 : 0, dev, (uint8_t)(key & 0xF), now);
+  if (ev == PA_EV_NONE) return;
+  lock_feedback(ev, now);
+  lock_report(ev, key);
+}
+
+static int parse_keys(const char *s, uint8_t *out) {
+  int n = 0;
+  char tmp[64];
+  strncpy(tmp, s, sizeof(tmp) - 1);
+  tmp[sizeof(tmp) - 1] = 0;
+  for (char *t = strtok(tmp, ","); t && n < PA_LOCK_MAX; t = strtok(nullptr, ",")) {
+    if (!strcmp(t, "ON")) out[n++] = 8;
+    else if (!strcmp(t, "OFF")) out[n++] = 4;
+    else out[n++] = (uint8_t)(strtoul(t, nullptr, 16) & 0xF);
+  }
+  return n;
+}
+
+static bool lock_command(const char *c) {
+  char a[24], b[64];
+  unsigned v = 0;
+  if (!strcmp(c, "LOCK STATUS")) {
+    lock_report(PA_EV_NONE, -1);
+  } else if (sscanf(c, "LOCK LEARN %23s", a) == 1) {
+    int idx = owner_index(a);
+    if (idx < 0) { emitln("{\"type\":\"err\",\"msg\":\"unknown device\"}"); return true; }
+    pa_lock_learn(&lock, idx);
+    lock_report(PA_EV_NONE, -1);
+  } else if (sscanf(c, "LOCK SET %23s %63s", a, b) == 2) {
+    uint8_t keys[PA_LOCK_MAX];
+    int idx = owner_index(a), n = parse_keys(b, keys);
+    if (idx < 0 || !pa_lock_set(&lock, idx, keys, n)) {
+      emitln("{\"type\":\"err\",\"msg\":\"LOCK SET needs a known device and 4-12 keys\"}");
+      return true;
+    }
+    lock_save();
+    lock_report(PA_EV_LEARNED, -1);
+  } else if (!strcmp(c, "LOCK CLEAR")) {
+    pa_lock_clear(&lock);
+    lock_save();
+    lock_report(PA_EV_NONE, -1);
+  } else if (!strcmp(c, "LOCK NOW")) {
+    pa_lock_force_lock(&lock);
+    lock_report(PA_EV_LOCK, -1);
+  } else if (sscanf(c, "LOCK RELOCK %u", &v) == 1 && v <= 3600) {
+    lock.relock_ms = v * 1000u;
+    lock_save();
+    lock_report(PA_EV_NONE, -1);
+  } else {
+    return false;
+  }
+  return true;
+}
+#endif
+
 #if PHYAUTH_MODEL_PRESENT
 // Same rule as the host engine: median of the first N normalised distances.
 static void decide_burst() {
@@ -272,7 +439,14 @@ static void decide_burst() {
            burst.by_code ? "true" : "false", med_d, PA_THRESH[burst.dev], med_score, burst.frames, verdict,
            burst.clock_us, (long long)burst.infer_us, fp_ok ? 1 : 0, drift, live);
   emit(out_buf);
-  actuate(ok);
+  if (lock_active()) {          // lock mode: per-press feedback comes from the lock
+    verdict_state = ok ? 1 : 2;
+    if (ok) ind_set(0, 40, 0);
+    actuator_off_ms = millis() + 800;
+    lock_on_press(ok, burst.dev, burst.code, burst.nbits, burst.frames);
+  } else {
+    actuate(ok);
+  }
 }
 
 static void edge_authenticate(const int32_t *src, int n, int64_t gap_ns, uint64_t t_ns, uint32_t seq) {
@@ -483,6 +657,47 @@ static void handle_command(char *c) {
   } else if (!strcmp(c, "LIVE ON") || !strcmp(c, "LIVE OFF")) {
     live_check = c[6] == 'N';
     emitln(live_check ? "{\"type\":\"ack\",\"cmd\":\"LIVE ON\"}" : "{\"type\":\"ack\",\"cmd\":\"LIVE OFF\"}");
+#if PHYAUTH_MODEL_PRESENT
+  } else if (!strncmp(c, "LOCK", 4) && lock_command(c)) {
+    // handled
+#endif
+  } else if (!strcmp(c, "PINTEST")) {   // GPIO25 3 s, buzzer 3 beeps, GPIO26 3 s
+    digitalWrite(LED_OK, HIGH); digitalWrite(LED_BAD, LOW);
+    emitln("{\"type\":\"ack\",\"cmd\":\"PINTEST\",\"on\":\"LED_OK\"}");
+    delay(3000);
+    digitalWrite(LED_OK, LOW);
+    delay(1000);
+    emitln("{\"type\":\"ack\",\"cmd\":\"PINTEST\",\"on\":\"BUZZER\"}");
+    for (int i = 0; i < 3; i++) {
+      digitalWrite(BUZZER_PIN, HIGH); delay(300);
+      digitalWrite(BUZZER_PIN, LOW); delay(300);
+    }
+    delay(1000);
+    digitalWrite(LED_BAD, HIGH);
+    emitln("{\"type\":\"ack\",\"cmd\":\"PINTEST\",\"on\":\"LED_BAD\"}");
+    delay(3000);
+    digitalWrite(LED_BAD, LOW);
+  } else if (!strcmp(c, "ALLON") || !strcmp(c, "SCAN")) {
+    // Wiring finder: drive every free output-capable GPIO (not GPIO14 = radio input).
+    static const int pins[] = {4, 5, 13, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33};
+    const int np = sizeof(pins) / sizeof(pins[0]);
+    bool all = !strcmp(c, "ALLON");
+    for (int i = 0; i < np; i++) pinMode(pins[i], OUTPUT);
+    if (all) {
+      for (int i = 0; i < np; i++) digitalWrite(pins[i], HIGH);
+      emitln("{\"type\":\"ack\",\"cmd\":\"ALLON\"}");
+      delay(5000);
+      for (int i = 0; i < np; i++) digitalWrite(pins[i], LOW);
+    } else {
+      for (int i = 0; i < np; i++) {
+        digitalWrite(pins[i], HIGH);
+        snprintf(out_buf, sizeof(out_buf), "{\"type\":\"ack\",\"cmd\":\"SCAN\",\"step\":%d,\"pin\":%d}", i + 1, pins[i]);
+        emitln(out_buf);
+        delay(2000);
+        digitalWrite(pins[i], LOW);
+        delay(700);
+      }
+    }
   } else if (!strcmp(c, "TEST")) {
     actuate(true); delay(400); actuate(false);
     emitln("{\"type\":\"ack\",\"cmd\":\"TEST\"}");
@@ -536,7 +751,14 @@ void setup() {
   gpio_isr_handler_add(RX_PIN, on_edge, nullptr);
 
   ind_set(0, 0, 0);
+#if PHYAUTH_MODEL_PRESENT
+  pa_lock_init(&lock, 30000, 15000, 30000);  // clear unfinished attempt after 30 s idle (no failure), relock 15 s, lockout 30 s
+  lock_load();
+#endif
   print_hello();
+#if PHYAUTH_MODEL_PRESENT
+  lock_report(PA_EV_NONE, -1);
+#endif
 }
 
 void loop() {
@@ -560,6 +782,16 @@ void loop() {
     bool on = (now / 120) & 1;
     if (on != blink_on) { blink_on = on; ind_set(on ? 50 : 0, 0, 0); }
   }
+#if PHYAUTH_MODEL_PRESENT
+  if (lock_active()) {
+    pa_lock_event_t lev = pa_lock_tick(&lock, now);
+    if (lev != PA_EV_NONE) {
+      lock_feedback(lev, now);
+      lock_report(lev, -1);
+    }
+    lock_outputs(now);
+  }
+#endif
   if (now - last_stats >= 2000) {
     uint32_t edges = edge_count;
     uint32_t eps = (edges - last_edges) * 1000u / (now - last_stats);

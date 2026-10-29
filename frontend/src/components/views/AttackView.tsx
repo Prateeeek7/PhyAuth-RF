@@ -38,18 +38,7 @@ export function AttackView({ devices, decisions, notify }: { devices: Device[]; 
   };
 
   return (
-    <div className="grid-2">
-      <Panel title="Threat model">
-        <p className="hint">
-          EV1527-class remotes send a <b>fixed code</b>. Anyone with a ₹150 receiver can record it, and a ₹400 ESP32 + STX882 can replay it bit-perfectly with the victim&apos;s exact clock period. A code-only receiver opens the door. PhyAuth-RF checks the <b>physical fingerprint</b> of the transmitter (oscillator jitter, PA edge asymmetry, start-up transient) and a per-press <b>liveness</b> cue: a battery fob starts from cold on every press, so its clock drifts over the first frames, while an always-on crystal transmitter does not.
-        </p>
-        <ol className="hint" style={{ paddingLeft: 18, marginTop: 6 }}>
-          <li>Enroll the genuine fob (record and train).</li>
-          <li>Record the ESP32 node as <b>CLONE_A</b> (<i>not enrolled</i>) using the Capture tab&apos;s transmitter buttons, so the report measures it zero-shot.</li>
-          <li>Launch the clone below. The receiver should report <Badge tone="danger">Spoof suspected</Badge>.</li>
-        </ol>
-      </Panel>
-
+    <div className="split-side stretch">
       <Panel title="Clone / replay attack">
         <div className="form-grid">
           <Field label="Victim (enrolled device with learned code)">
